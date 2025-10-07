@@ -360,7 +360,8 @@
             cursor: pointer;
             font-weight: bold;
         }
-                /* Tambahkan di CSS yang sudah ada */
+
+        /* CSS tambahan untuk Qty Baru */
         .qty-baru {
             font-weight: bold;
             color: #e67e22;
@@ -368,19 +369,11 @@
             padding: 2px 6px;
             border-radius: 3px;
             border: 1px solid #ffeaa7;
+            font-size: 12px;
         }
 
-        .print-only {
-            display: none;
-        }
-
-        @media print {
-            .print-only {
-                display: block;
-            }
-            .no-print {
-                display: none;
-            }
+        .edited-row {
+            background: #f8f9fa !important;
         }
     </style>
 </head>
@@ -604,8 +597,8 @@
 
     <script>
         // Supabase Configuration
-        const SUPABASE_URL = 'https://qfxkbaoyqokhvpwfcjif.supabase.co'; // Ganti dengan URL Supabase Anda
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmeGtiYW95cW9raHZwd2ZjamlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg0NTAyMTQsImV4cCI6MjA3NDAyNjIxNH0.D6YfIpoufJ5tjWtIDL7BcM8Rbgx179i76b7uM9r-qoE'; // Ganti dengan anon key Anda
+        const SUPABASE_URL = 'https://qfxkbaoyqokhvpwfcjif.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmeGtiYW95cW9raHZwd2ZjamlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg0NTAyMTQsImV4cCI6MjA3NDAyNjIxNH0.D6YfIpoufJ5tjWtIDL7BcM8Rbgx179i76b7uM9r-qoE';
 
         // Initialize Supabase
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -782,6 +775,7 @@
             
             document.getElementById('opnameSummary').innerHTML = `
                 <p><strong>✅ Data Terupload:</strong> ${opnameData.length} records</p>
+                <p><small>Format terdeteksi: ${Object.keys(opnameData[0] || {}).join(', ')}</small></p>
             `;
             checkReadyForComparison();
         }
@@ -794,6 +788,7 @@
             
             document.getElementById('stokUpdateSummary').innerHTML = `
                 <p><strong>✅ Data Terupload:</strong> ${stokUpdateData.length} records</p>
+                <p><small>Format terdeteksi: ${Object.keys(stokUpdateData[0] || {}).join(', ')}</small></p>
             `;
             checkReadyForComparison();
         }
@@ -834,20 +829,52 @@
             compareBtn.disabled = !(opnameData.length > 0 && stokUpdateData.length > 0);
         }
 
-        // Compare data
+        // Fungsi helper untuk mendapatkan value dari berbagai kemungkinan key
+        function getValue(item, possibleKeys) {
+            for (const key of possibleKeys) {
+                if (item[key] !== undefined && item[key] !== null && item[key] !== '') {
+                    return item[key];
+                }
+            }
+            return '';
+        }
+
+        // Compare data - VERSI DIPERBAIKI dengan support multiple column names
         function compareData() {
             comparisonResults = [];
             
+            console.log('Data Stok Opname:', opnameData);
+            console.log('Data Stok Update:', stokUpdateData);
+            
+            // Process opname data
             opnameData.forEach((opnameItem, index) => {
-                const barcode = opnameItem.barcode;
-                const gudang = opnameItem.gudang || 'Gudang Utama';
+                // Ambil barcode dari berbagai kemungkinan kolom
+                const barcode = getValue(opnameItem, ['barcode', 'kode', 'kode_barang', 'sku', 'kode barang']);
                 
-                const stokUpdateItem = stokUpdateData.find(stok => 
-                    stok.barcode === barcode && stok.gudang === gudang
-                );
+                // Ambil quantity dari berbagai kemungkinan kolom
+                const qtyText = getValue(opnameItem, ['qty', 'quantity', 'qty_opname', 'stok', 'stok_opname', 'jumlah']);
+                const qtyOpname = parseInt(qtyText) || 0;
                 
-                const qtyOpname = parseInt(opnameItem.qty || 0);
-                const qtyUpdate = stokUpdateItem ? parseInt(stokUpdateItem.qty_update || 0) : 0;
+                // Ambil gudang dari berbagai kemungkinan kolom
+                const gudang = getValue(opnameItem, ['gudang', 'warehouse', 'lokasi', 'location']) || 'Gudang Utama';
+                
+                // Ambil nama barang dari berbagai kemungkinan kolom
+                const namaBarang = getValue(opnameItem, ['nama_barang', 'nama', 'nama barang', 'product_name', 'item_name']) || 'Unknown';
+                
+                console.log(`Processing:`, { barcode, namaBarang, qtyOpname, gudang });
+                
+                // Cari matching item di stok update
+                const stokUpdateItem = stokUpdateData.find(stok => {
+                    const stokBarcode = getValue(stok, ['barcode', 'kode', 'kode_barang', 'sku', 'kode barang']);
+                    const stokGudang = getValue(stok, ['gudang', 'warehouse', 'lokasi', 'location']) || 'Gudang Utama';
+                    
+                    return stokBarcode === barcode && stokGudang === gudang;
+                });
+                
+                // Ambil qty update dari berbagai kemungkinan kolom
+                const qtyUpdateText = stokUpdateItem ? getValue(stokUpdateItem, ['qty_update', 'qty', 'quantity', 'stok', 'stok_update']) : '0';
+                const qtyUpdate = parseInt(qtyUpdateText) || 0;
+                
                 const selisih = qtyOpname - qtyUpdate;
                 
                 let status = 'SESUAI';
@@ -864,7 +891,7 @@
                 comparisonResults.push({
                     id: index + 1,
                     barcode: barcode,
-                    nama_barang: opnameItem.nama_barang || 'Unknown',
+                    nama_barang: namaBarang,
                     gudang: gudang,
                     qty_opname: qtyOpname,
                     qty_update: qtyUpdate,
@@ -880,20 +907,25 @@
             
             // Add items from stok update that are not in opname data
             stokUpdateData.forEach((stokItem, index) => {
-                const barcode = stokItem.barcode;
-                const gudang = stokItem.gudang || 'Gudang Utama';
+                const barcode = getValue(stokItem, ['barcode', 'kode', 'kode_barang', 'sku', 'kode barang']);
+                const gudang = getValue(stokItem, ['gudang', 'warehouse', 'lokasi', 'location']) || 'Gudang Utama';
                 
-                const existsInOpname = opnameData.some(opname => 
-                    opname.barcode === barcode && opname.gudang === gudang
-                );
+                const existsInOpname = opnameData.some(opname => {
+                    const opnameBarcode = getValue(opname, ['barcode', 'kode', 'kode_barang', 'sku', 'kode barang']);
+                    const opnameGudang = getValue(opname, ['gudang', 'warehouse', 'lokasi', 'location']) || 'Gudang Utama';
+                    
+                    return opnameBarcode === barcode && opnameGudang === gudang;
+                });
                 
                 if (!existsInOpname) {
-                    const qtyUpdate = parseInt(stokItem.qty_update || 0);
+                    const qtyUpdateText = getValue(stokItem, ['qty_update', 'qty', 'quantity', 'stok', 'stok_update']);
+                    const qtyUpdate = parseInt(qtyUpdateText) || 0;
+                    const namaBarang = getValue(stokItem, ['nama_barang', 'nama', 'nama barang', 'product_name', 'item_name']) || 'Unknown';
                     
                     comparisonResults.push({
                         id: comparisonResults.length + 1,
                         barcode: barcode,
-                        nama_barang: stokItem.nama_barang || 'Unknown',
+                        nama_barang: namaBarang,
                         gudang: gudang,
                         qty_opname: 0,
                         qty_update: qtyUpdate,
@@ -908,12 +940,16 @@
                 }
             });
             
+            console.log('Hasil perbandingan:', comparisonResults);
             updateComparisonTable();
             updateReportSummary();
             document.getElementById('saveBtn').disabled = false;
+            
+            // Switch ke tab hasil perbandingan
+            switchTab(2);
         }
 
-        // Update comparison table with filters
+        // Update comparison table with filters - VERSI DIPERBAIKI
         function updateComparisonTable() {
             const tbody = document.getElementById('comparisonBody');
             tbody.innerHTML = '';
@@ -957,7 +993,11 @@
             
             // Display filtered results
             filteredResults.forEach((item, index) => {
+                const isEdited = item.qty_baru !== item.qty_opname;
                 const row = document.createElement('tr');
+                if (isEdited) {
+                    row.className = 'edited-row';
+                }
                 row.innerHTML = `
                     <td>${index + 1}</td>
                     <td>${item.barcode}</td>
@@ -970,6 +1010,7 @@
                     <td>
                         <input type="number" value="${item.qty_baru}" class="editable"
                                onchange="updateQtyBaru(${comparisonResults.indexOf(item)}, this.value)">
+                        ${isEdited ? '<br><small class="qty-baru">✏️ Edited</small>' : ''}
                     </td>
                     <td>
                         <textarea onchange="updateReason(${comparisonResults.indexOf(item)}, this.value)" 
@@ -1182,6 +1223,7 @@
             const sesuai = comparisonResults.filter(item => item.selisih === 0).length;
             const lebih = comparisonResults.filter(item => item.selisih > 0).length;
             const kurang = comparisonResults.filter(item => item.selisih < 0).length;
+            const edited = comparisonResults.filter(item => item.qty_baru !== item.qty_opname).length;
 
             summary.innerHTML = `
                 <div class="summary-card">
@@ -1204,146 +1246,15 @@
                     <p style="font-size: 24px; font-weight: bold; color: #e74c3c;">${kurang}</p>
                     <p>Item kurang</p>
                 </div>
+                <div class="summary-card">
+                    <h4>Edited</h4>
+                    <p style="font-size: 24px; font-weight: bold; color: #9b59b6;">${edited}</p>
+                    <p>Item diedit</p>
+                </div>
             `;
         }
 
-        // Generate report
-        function generateReport() {
-            // Apply current filters to report
-            let filteredResults = comparisonResults.filter(item => {
-                let statusMatch = false;
-                if (item.selisih === 0 && activeFilters.match) statusMatch = true;
-                if (item.selisih > 0 && activeFilters.plus) statusMatch = true;
-                if (item.selisih < 0 && activeFilters.minus) statusMatch = true;
-                
-                if (!statusMatch) return false;
-                
-                if (searchTerm) {
-                    const searchMatch = item.barcode.toLowerCase().includes(searchTerm) || 
-                                      item.nama_barang.toLowerCase().includes(searchTerm);
-                    if (!searchMatch) return false;
-                }
-                
-                return true;
-            });
-
-            if (filteredResults.length === 0) {
-                alert('Tidak ada data yang sesuai dengan filter untuk dicetak!');
-                return;
-            }
-
-            const printWindow = window.open('', '_blank');
-            const printDate = new Date().toLocaleDateString('id-ID');
-            
-            let printContent = `
-                <html>
-                <head>
-                    <title>Laporan Stok Opname</title>
-                    <style>
-                        body { font-family: Arial, sans-serif; margin: 20px; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-                        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                        th { background-color: #f2f2f2; }
-                        .match { background-color: #d4edda; }
-                        .plus { background-color: #ffeaa7; }
-                        .minus { background-color: #ffcccc; }
-                    </style>
-                </head>
-                <body>
-                    <h2>Laporan Stok Opname</h2>
-                    <p>Tanggal: ${printDate}</p>
-                    <p>User: ${currentUser.email}</p>
-                    <p>Filter: ${getActiveFiltersText()}</p>
-                    <p>Total Data: ${filteredResults.length} item</p>
-                    <table>
-                        <tr>
-                            <th>No</th>
-                            <th>Barcode</th>
-                            <th>Nama Barang</th>
-                            <th>Gudang</th>
-                            <th>Qty Opname</th>
-                            <th>Qty Update</th>
-                            <th>Selisih</th>
-                            <th>Status</th>
-                        </tr>
-            `;
-            
-            filteredResults.forEach((item, index) => {
-                const rowClass = item.selisih === 0 ? 'match' : item.selisih > 0 ? 'plus' : 'minus';
-                printContent += `
-                    <tr class="${rowClass}">
-                        <td>${index + 1}</td>
-                        <td>${item.barcode}</td>
-                        <td>${item.nama_barang}</td>
-                        <td>${item.gudang}</td>
-                        <td>${item.qty_opname}</td>
-                        <td>${item.qty_update}</td>
-                        <td>${item.selisih}</td>
-                        <td>${item.status}</td>
-                    </tr>
-                `;
-            });
-            
-            printContent += `</table></body></html>`;
-            
-            printWindow.document.write(printContent);
-            printWindow.document.close();
-            printWindow.print();
-        }
-
-        function getActiveFiltersText() {
-            const filters = [];
-            if (activeFilters.match) filters.push('Sesuai');
-            if (activeFilters.plus) filters.push('Lebih');
-            if (activeFilters.minus) filters.push('Kurang');
-            
-            return filters.length === 3 ? 'Semua' : filters.join(', ');
-        }
-
-        // Export to Excel
-        function exportToExcel() {
-            if (comparisonResults.length === 0) {
-                alert('Tidak ada data untuk diexport!');
-                return;
-            }
-            
-            // Apply current filters to export
-            let filteredResults = comparisonResults.filter(item => {
-                let statusMatch = false;
-                if (item.selisih === 0 && activeFilters.match) statusMatch = true;
-                if (item.selisih > 0 && activeFilters.plus) statusMatch = true;
-                if (item.selisih < 0 && activeFilters.minus) statusMatch = true;
-                
-                return statusMatch;
-            });
-
-            if (filteredResults.length === 0) {
-                alert('Tidak ada data yang sesuai dengan filter untuk diexport!');
-                return;
-            }
-            
-            let csvContent = "No,Barcode,Nama Barang,Gudang,Qty Opname,Qty Update,Selisih,Status,Reason\n";
-            
-            filteredResults.forEach((item, index) => {
-                csvContent += `"${index + 1}","${item.barcode}","${item.nama_barang}","${item.gudang}",${item.qty_opname},${item.qty_update},${item.selisih},"${item.status}","${item.reason}"\n`;
-            });
-            
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `stok_opname_${new Date().toISOString().split('T')[0]}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
-        // Initialize app
-        document.addEventListener('DOMContentLoaded', function() {
-            checkAuth();
-            updateActiveFiltersDisplay();
-        });
-                // Generate report - VERSI DIPERBAIKI dengan Qty Baru
+        // Generate report - VERSI DIPERBAIKI dengan Qty Baru
         function generateReport() {
             // Apply current filters to report
             let filteredResults = comparisonResults.filter(item => {
@@ -1442,7 +1353,8 @@
                         Total: ${filteredResults.length} item | 
                         Sesuai: ${filteredResults.filter(item => item.selisih === 0).length} | 
                         Lebih: ${filteredResults.filter(item => item.selisih > 0).length} | 
-                        Kurang: ${filteredResults.filter(item => item.selisih < 0).length}
+                        Kurang: ${filteredResults.filter(item => item.selisih < 0).length} |
+                        Edited: ${filteredResults.filter(item => item.qty_baru !== item.qty_opname).length}
                     </div>
 
                     <table>
@@ -1542,20 +1454,21 @@
             filteredResults.forEach((item, index) => {
                 const isEdited = item.qty_baru !== item.qty_opname;
                 const editedMarker = isEdited ? " (edited)" : "";
-                csvContent += `"${index + 1}","${item.barcode}","${item.nama_barang}","${item.gudang}",${item.qty_opname},${item.qty_update},${item.qty_baru}${editedMarker},${item.selisih},"${item.status}","${item.reason || ''}"\n`;
+                csvContent += `"${index + 1}","${item.barcode}","${item.nama_barang}","${item.gudang}",${item.qty_opname},${item.qty_update},"${item.qty_baru}${editedMarker}",${item.selisih},"${item.status}","${item.reason || ''}"\n`;
             });
             
             // Tambahkan summary di akhir
             const sesuai = filteredResults.filter(item => item.selisih === 0).length;
             const lebih = filteredResults.filter(item => item.selisih > 0).length;
             const kurang = filteredResults.filter(item => item.selisih < 0).length;
+            const edited = filteredResults.filter(item => item.qty_baru !== item.qty_opname).length;
             
             csvContent += `\nSUMMARY\n`;
             csvContent += `Total Item,${filteredResults.length}\n`;
             csvContent += `Sesuai,${sesuai}\n`;
             csvContent += `Lebih,${lebih}\n`;
             csvContent += `Kurang,${kurang}\n`;
-            csvContent += `Item Edited,${filteredResults.filter(item => item.qty_baru !== item.qty_opname).length}\n`;
+            csvContent += `Item Edited,${edited}\n`;
             
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
@@ -1576,8 +1489,12 @@
             
             return filters.length === 3 ? 'Semua' : filters.join(', ');
         }
+
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuth();
+            updateActiveFiltersDisplay();
+        });
     </script>
 </body>
-
 </html>
-
