@@ -360,6 +360,28 @@
             cursor: pointer;
             font-weight: bold;
         }
+                /* Tambahkan di CSS yang sudah ada */
+        .qty-baru {
+            font-weight: bold;
+            color: #e67e22;
+            background: #fff3cd;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid #ffeaa7;
+        }
+
+        .print-only {
+            display: none;
+        }
+
+        @media print {
+            .print-only {
+                display: block;
+            }
+            .no-print {
+                display: none;
+            }
+        }
     </style>
 </head>
 <body>
@@ -886,12 +908,7 @@
                 }
             });
             
-            updateComparisonTable();
-            updateReportSummary();
-            document.getElementById('saveBtn').disabled = false;
-        }
-
-        // Update comparison table with filters
+                   // Update comparison table with filters - VERSI DIPERBAIKI
         function updateComparisonTable() {
             const tbody = document.getElementById('comparisonBody');
             tbody.innerHTML = '';
@@ -902,6 +919,69 @@
                 document.getElementById('totalCount').textContent = '0';
                 return;
             }
+            
+            // Apply filters
+            let filteredResults = comparisonResults.filter(item => {
+                // Status filter
+                let statusMatch = false;
+                if (item.selisih === 0 && activeFilters.match) statusMatch = true;
+                if (item.selisih > 0 && activeFilters.plus) statusMatch = true;
+                if (item.selisih < 0 && activeFilters.minus) statusMatch = true;
+                
+                if (!statusMatch) return false;
+                
+                // Search filter
+                if (searchTerm) {
+                    const searchMatch = item.barcode.toLowerCase().includes(searchTerm) || 
+                                      item.nama_barang.toLowerCase().includes(searchTerm) ||
+                                      item.gudang.toLowerCase().includes(searchTerm);
+                    if (!searchMatch) return false;
+                }
+                
+                return true;
+            });
+            
+            // Update counts
+            document.getElementById('displayCount').textContent = filteredResults.length;
+            document.getElementById('totalCount').textContent = comparisonResults.length;
+            
+            if (filteredResults.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; padding: 20px;">Tidak ada data yang sesuai dengan filter.</td></tr>';
+                return;
+            }
+            
+            // Display filtered results
+            filteredResults.forEach((item, index) => {
+                const isEdited = item.qty_baru !== item.qty_opname;
+                const row = document.createElement('tr');
+                if (isEdited) {
+                    row.style.background = '#f8f9fa';
+                }
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td>${item.barcode}</td>
+                    <td>${item.nama_barang}</td>
+                    <td>${item.gudang}</td>
+                    <td>${item.qty_opname}</td>
+                    <td>${item.qty_update}</td>
+                    <td>${item.selisih}</td>
+                    <td class="${item.status_class}">${item.status}</td>
+                    <td>
+                        <input type="number" value="${item.qty_baru}" class="editable"
+                               onchange="updateQtyBaru(${comparisonResults.indexOf(item)}, this.value)">
+                        ${isEdited ? '<br><small class="qty-baru">✏️ Edited</small>' : ''}
+                    </td>
+                    <td>
+                        <textarea onchange="updateReason(${comparisonResults.indexOf(item)}, this.value)" 
+                                  style="width: 100%; height: 40px; padding: 5px; font-size: 12px;">${item.reason}</textarea>
+                    </td>
+                    <td>
+                        <button onclick="removeItem(${comparisonResults.indexOf(item)})" class="btn-danger">Hapus</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
             
             // Apply filters
             let filteredResults = comparisonResults.filter(item => {
@@ -1321,7 +1401,241 @@
             checkAuth();
             updateActiveFiltersDisplay();
         });
+                // Generate report - VERSI DIPERBAIKI dengan Qty Baru
+        function generateReport() {
+            // Apply current filters to report
+            let filteredResults = comparisonResults.filter(item => {
+                let statusMatch = false;
+                if (item.selisih === 0 && activeFilters.match) statusMatch = true;
+                if (item.selisih > 0 && activeFilters.plus) statusMatch = true;
+                if (item.selisih < 0 && activeFilters.minus) statusMatch = true;
+                
+                if (!statusMatch) return false;
+                
+                if (searchTerm) {
+                    const searchMatch = item.barcode.toLowerCase().includes(searchTerm) || 
+                                      item.nama_barang.toLowerCase().includes(searchTerm);
+                    if (!searchMatch) return false;
+                }
+                
+                return true;
+            });
+
+            if (filteredResults.length === 0) {
+                alert('Tidak ada data yang sesuai dengan filter untuk dicetak!');
+                return;
+            }
+
+            const printWindow = window.open('', '_blank');
+            const printDate = new Date().toLocaleDateString('id-ID', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            
+            let printContent = `
+                <html>
+                <head>
+                    <title>Laporan Stok Opname</title>
+                    <style>
+                        body { 
+                            font-family: Arial, sans-serif; 
+                            margin: 20px; 
+                            font-size: 12px;
+                        }
+                        .header { 
+                            text-align: center; 
+                            margin-bottom: 20px;
+                            border-bottom: 2px solid #333;
+                            padding-bottom: 10px;
+                        }
+                        table { 
+                            width: 100%; 
+                            border-collapse: collapse; 
+                            margin-top: 10px;
+                            font-size: 11px;
+                        }
+                        th, td { 
+                            border: 1px solid #ddd; 
+                            padding: 6px; 
+                            text-align: left; 
+                        }
+                        th { 
+                            background-color: #34495e; 
+                            color: white; 
+                            font-weight: bold;
+                        }
+                        .match { background-color: #d4edda; }
+                        .plus { background-color: #ffeaa7; }
+                        .minus { background-color: #ffcccc; }
+                        .summary {
+                            background: #f8f9fa;
+                            padding: 10px;
+                            border-radius: 5px;
+                            margin: 10px 0;
+                        }
+                        .footer {
+                            margin-top: 20px;
+                            font-size: 10px;
+                            color: #666;
+                            text-align: center;
+                        }
+                        .qty-baru {
+                            font-weight: bold;
+                            color: #e67e22;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h2>LAPORAN STOK OPNAME</h2>
+                        <p><strong>Tanggal:</strong> ${printDate}</p>
+                        <p><strong>User:</strong> ${currentUser.email}</p>
+                        <p><strong>Filter:</strong> ${getActiveFiltersText()}</p>
+                    </div>
+
+                    <div class="summary">
+                        <strong>STATISTIK: </strong>
+                        Total: ${filteredResults.length} item | 
+                        Sesuai: ${filteredResults.filter(item => item.selisih === 0).length} | 
+                        Lebih: ${filteredResults.filter(item => item.selisih > 0).length} | 
+                        Kurang: ${filteredResults.filter(item => item.selisih < 0).length}
+                    </div>
+
+                    <table>
+                        <tr>
+                            <th>No</th>
+                            <th>Barcode</th>
+                            <th>Nama Barang</th>
+                            <th>Gudang</th>
+                            <th>Qty Opname</th>
+                            <th>Qty Update</th>
+                            <th>Qty Baru</th>
+                            <th>Selisih</th>
+                            <th>Status</th>
+                            <th>Reason</th>
+                        </tr>
+            `;
+            
+            filteredResults.forEach((item, index) => {
+                const rowClass = item.selisih === 0 ? 'match' : item.selisih > 0 ? 'plus' : 'minus';
+                const isEdited = item.qty_baru !== item.qty_opname;
+                printContent += `
+                    <tr class="${rowClass}">
+                        <td>${index + 1}</td>
+                        <td>${item.barcode}</td>
+                        <td>${item.nama_barang}</td>
+                        <td>${item.gudang}</td>
+                        <td>${item.qty_opname}</td>
+                        <td>${item.qty_update}</td>
+                        <td class="${isEdited ? 'qty-baru' : ''}">
+                            ${item.qty_baru}
+                            ${isEdited ? '<br><small>(edited)</small>' : ''}
+                        </td>
+                        <td>${item.selisih}</td>
+                        <td><strong>${item.status}</strong></td>
+                        <td>${item.reason || '-'}</td>
+                    </tr>
+                `;
+            });
+            
+            printContent += `
+                    </table>
+                    
+                    <div class="footer">
+                        <p>Dicetak pada: ${new Date().toLocaleString('id-ID')}</p>
+                        <p>Sistem Stok Opname - Supabase</p>
+                    </div>
+                </body>
+                </html>
+            `;
+            
+            printWindow.document.write(printContent);
+            printWindow.document.close();
+            printWindow.print();
+        }
+
+        // Export to Excel - VERSI DIPERBAIKI dengan Qty Baru
+        function exportToExcel() {
+            if (comparisonResults.length === 0) {
+                alert('Tidak ada data untuk diexport!');
+                return;
+            }
+            
+            // Apply current filters to export
+            let filteredResults = comparisonResults.filter(item => {
+                let statusMatch = false;
+                if (item.selisih === 0 && activeFilters.match) statusMatch = true;
+                if (item.selisih > 0 && activeFilters.plus) statusMatch = true;
+                if (item.selisih < 0 && activeFilters.minus) statusMatch = true;
+                
+                if (!statusMatch) return false;
+                
+                if (searchTerm) {
+                    const searchMatch = item.barcode.toLowerCase().includes(searchTerm) || 
+                                      item.nama_barang.toLowerCase().includes(searchTerm);
+                    if (!searchMatch) return false;
+                }
+                
+                return true;
+            });
+
+            if (filteredResults.length === 0) {
+                alert('Tidak ada data yang sesuai dengan filter untuk diexport!');
+                return;
+            }
+            
+            // Header dengan informasi
+            let csvContent = "LAPORAN STOK OPNAME\n";
+            csvContent += `Tanggal: ${new Date().toLocaleDateString('id-ID')}\n`;
+            csvContent += `User: ${currentUser.email}\n`;
+            csvContent += `Filter: ${getActiveFiltersText()}\n`;
+            csvContent += `Total Data: ${filteredResults.length} item\n\n`;
+            
+            // Header kolom - TAMBAHKAN QTY BARU
+            csvContent += "No,Barcode,Nama Barang,Gudang,Qty Opname,Qty Update,Qty Baru,Selisih,Status,Reason\n";
+            
+            // Data - TAMBAHKAN QTY BARU
+            filteredResults.forEach((item, index) => {
+                const isEdited = item.qty_baru !== item.qty_opname;
+                const editedMarker = isEdited ? " (edited)" : "";
+                csvContent += `"${index + 1}","${item.barcode}","${item.nama_barang}","${item.gudang}",${item.qty_opname},${item.qty_update},${item.qty_baru}${editedMarker},${item.selisih},"${item.status}","${item.reason || ''}"\n`;
+            });
+            
+            // Tambahkan summary di akhir
+            const sesuai = filteredResults.filter(item => item.selisih === 0).length;
+            const lebih = filteredResults.filter(item => item.selisih > 0).length;
+            const kurang = filteredResults.filter(item => item.selisih < 0).length;
+            
+            csvContent += `\nSUMMARY\n`;
+            csvContent += `Total Item,${filteredResults.length}\n`;
+            csvContent += `Sesuai,${sesuai}\n`;
+            csvContent += `Lebih,${lebih}\n`;
+            csvContent += `Kurang,${kurang}\n`;
+            csvContent += `Item Edited,${filteredResults.filter(item => item.qty_baru !== item.qty_opname).length}\n`;
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `stok_opname_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Fungsi helper untuk format yang lebih baik
+        function getActiveFiltersText() {
+            const filters = [];
+            if (activeFilters.match) filters.push('Sesuai');
+            if (activeFilters.plus) filters.push('Lebih');
+            if (activeFilters.minus) filters.push('Kurang');
+            
+            return filters.length === 3 ? 'Semua' : filters.join(', ');
+        }
     </script>
 </body>
 
 </html>
+
