@@ -361,17 +361,7 @@
             font-weight: bold;
         }
 
-        /* CSS tambahan untuk Qty Baru */
-        .qty-baru {
-            font-weight: bold;
-            color: #e67e22;
-            background: #fff3cd;
-            padding: 2px 6px;
-            border-radius: 3px;
-            border: 1px solid #ffeaa7;
-            font-size: 12px;
-        }
-
+        /* CSS untuk edited row */
         .edited-row {
             background: #f8f9fa !important;
         }
@@ -438,6 +428,17 @@
                                 <input type="file" id="stokUpdateFile" accept=".csv" style="display: none" onchange="handleStokUpdateUpload(this.files[0])">
                             </div>
                             <div id="stokUpdateSummary"></div>
+                        </div>
+
+                        <div class="summary-card">
+                            <h4>Data Sales (Opsional)</h4>
+                            <div class="file-upload-area" onclick="document.getElementById('salesFile').click()">
+                                💰
+                                <p>Klik untuk upload Data Sales (CSV)</p>
+                                <p><small>Format: barcode, qty_sales</small></p>
+                                <input type="file" id="salesFile" accept=".csv" style="display: none" onchange="handleSalesUpload(this.files[0])">
+                            </div>
+                            <div id="salesSummary"></div>
                         </div>
                     </div>
 
@@ -514,18 +515,19 @@
                                 <th>Barcode</th>
                                 <th>Nama Barang</th>
                                 <th>Gudang</th>
+                                <th>Sales</th>
                                 <th>Qty Opname</th>
                                 <th>Qty Update</th>
                                 <th>Selisih</th>
                                 <th>Status</th>
-                                <th>Edit Qty Baru</th>
+                                <th>Qty Baru</th>
                                 <th>Reason</th>
                                 <th>Aksi</th>
                             </tr>
                         </thead>
                         <tbody id="comparisonBody">
                             <tr>
-                                <td colspan="11" style="text-align: center; padding: 20px;">
+                                <td colspan="12" style="text-align: center; padding: 20px;">
                                     Belum ada data. Upload data dan lakukan perbandingan terlebih dahulu.
                                 </td>
                             </tr>
@@ -606,6 +608,7 @@
         // Global variables
         let opnameData = [];
         let stokUpdateData = [];
+        let salesData = [];
         let comparisonResults = [];
         let currentUser = null;
         
@@ -793,6 +796,18 @@
             checkReadyForComparison();
         }
 
+        async function handleSalesUpload(file) {
+            if (!file) return;
+            
+            const text = await file.text();
+            salesData = parseCSV(text);
+            
+            document.getElementById('salesSummary').innerHTML = `
+                <p><strong>✅ Data Terupload:</strong> ${salesData.length} records</p>
+                <p><small>Format terdeteksi: ${Object.keys(salesData[0] || {}).join(', ')}</small></p>
+            `;
+        }
+
         // Parse CSV
         function parseCSV(csv) {
             const lines = csv.split('\n').filter(line => line.trim());
@@ -839,12 +854,13 @@
             return '';
         }
 
-        // Compare data - VERSI DIPERBAIKI dengan support multiple column names
+        // Compare data - VERSI DIPERBAIKI dengan support multiple column names dan sales
         function compareData() {
             comparisonResults = [];
             
             console.log('Data Stok Opname:', opnameData);
             console.log('Data Stok Update:', stokUpdateData);
+            console.log('Data Sales:', salesData);
             
             // Process opname data
             opnameData.forEach((opnameItem, index) => {
@@ -861,7 +877,17 @@
                 // Ambil nama barang dari berbagai kemungkinan kolom
                 const namaBarang = getValue(opnameItem, ['nama_barang', 'nama', 'nama barang', 'product_name', 'item_name']) || 'Unknown';
                 
-                console.log(`Processing:`, { barcode, namaBarang, qtyOpname, gudang });
+                // Cari data sales berdasarkan barcode
+                const salesItem = salesData.find(sales => {
+                    const salesBarcode = getValue(sales, ['barcode', 'kode', 'kode_barang', 'sku', 'kode barang']);
+                    return salesBarcode === barcode;
+                });
+                
+                // Ambil quantity sales dari berbagai kemungkinan kolom
+                const salesText = salesItem ? getValue(salesItem, ['qty_sales', 'sales', 'qty', 'quantity', 'jumlah']) : '0';
+                const qtySales = parseInt(salesText) || 0;
+                
+                console.log(`Processing:`, { barcode, namaBarang, qtyOpname, gudang, qtySales });
                 
                 // Cari matching item di stok update
                 const stokUpdateItem = stokUpdateData.find(stok => {
@@ -893,6 +919,7 @@
                     barcode: barcode,
                     nama_barang: namaBarang,
                     gudang: gudang,
+                    qty_sales: qtySales,
                     qty_opname: qtyOpname,
                     qty_update: qtyUpdate,
                     qty_baru: qtyOpname,
@@ -922,11 +949,20 @@
                     const qtyUpdate = parseInt(qtyUpdateText) || 0;
                     const namaBarang = getValue(stokItem, ['nama_barang', 'nama', 'nama barang', 'product_name', 'item_name']) || 'Unknown';
                     
+                    // Cari data sales untuk barang ini
+                    const salesItem = salesData.find(sales => {
+                        const salesBarcode = getValue(sales, ['barcode', 'kode', 'kode_barang', 'sku', 'kode barang']);
+                        return salesBarcode === barcode;
+                    });
+                    const salesText = salesItem ? getValue(salesItem, ['qty_sales', 'sales', 'qty', 'quantity', 'jumlah']) : '0';
+                    const qtySales = parseInt(salesText) || 0;
+                    
                     comparisonResults.push({
                         id: comparisonResults.length + 1,
                         barcode: barcode,
                         nama_barang: namaBarang,
                         gudang: gudang,
+                        qty_sales: qtySales,
                         qty_opname: 0,
                         qty_update: qtyUpdate,
                         qty_baru: 0,
@@ -949,13 +985,13 @@
             switchTab(2);
         }
 
-        // Update comparison table with filters - VERSI DIPERBAIKI
+        // Update comparison table with filters - VERSI DIPERBAIKI tanpa tulisan edit
         function updateComparisonTable() {
             const tbody = document.getElementById('comparisonBody');
             tbody.innerHTML = '';
             
             if (comparisonResults.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; padding: 20px;">Belum ada data.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 20px;">Belum ada data.</td></tr>';
                 document.getElementById('displayCount').textContent = '0';
                 document.getElementById('totalCount').textContent = '0';
                 return;
@@ -987,7 +1023,7 @@
             document.getElementById('totalCount').textContent = comparisonResults.length;
             
             if (filteredResults.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; padding: 20px;">Tidak ada data yang sesuai dengan filter.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 20px;">Tidak ada data yang sesuai dengan filter.</td></tr>';
                 return;
             }
             
@@ -1003,6 +1039,7 @@
                     <td>${item.barcode}</td>
                     <td>${item.nama_barang}</td>
                     <td>${item.gudang}</td>
+                    <td>${item.qty_sales}</td>
                     <td>${item.qty_opname}</td>
                     <td>${item.qty_update}</td>
                     <td>${item.selisih}</td>
@@ -1010,7 +1047,6 @@
                     <td>
                         <input type="number" value="${item.qty_baru}" class="editable"
                                onchange="updateQtyBaru(${comparisonResults.indexOf(item)}, this.value)">
-                        ${isEdited ? '<br><small class="qty-baru">✏️ Edited</small>' : ''}
                     </td>
                     <td>
                         <textarea onchange="updateReason(${comparisonResults.indexOf(item)}, this.value)" 
@@ -1070,6 +1106,7 @@
             
             const namaBarang = prompt('Nama Barang:');
             const gudang = prompt('Gudang:', 'Gudang Utama');
+            const qtySales = parseInt(prompt('Qty Sales:', '0')) || 0;
             const qtyBaru = parseInt(prompt('Qty Opname:', '0')) || 0;
             const qtyUpdate = parseInt(prompt('Qty Update:', '0')) || 0;
             
@@ -1090,6 +1127,7 @@
                 barcode: barcode,
                 nama_barang: namaBarang,
                 gudang: gudang,
+                qty_sales: qtySales,
                 qty_opname: qtyBaru,
                 qty_update: qtyUpdate,
                 qty_baru: qtyBaru,
@@ -1254,7 +1292,7 @@
             `;
         }
 
-        // Generate report - VERSI DIPERBAIKI dengan Qty Baru
+        // Generate report - VERSI DIPERBAIKI dengan Sales dan tanpa tulisan edit
         function generateReport() {
             // Apply current filters to report
             let filteredResults = comparisonResults.filter(item => {
@@ -1363,6 +1401,7 @@
                             <th>Barcode</th>
                             <th>Nama Barang</th>
                             <th>Gudang</th>
+                            <th>Sales</th>
                             <th>Qty Opname</th>
                             <th>Qty Update</th>
                             <th>Qty Baru</th>
@@ -1381,12 +1420,10 @@
                         <td>${item.barcode}</td>
                         <td>${item.nama_barang}</td>
                         <td>${item.gudang}</td>
+                        <td>${item.qty_sales}</td>
                         <td>${item.qty_opname}</td>
                         <td>${item.qty_update}</td>
-                        <td class="${isEdited ? 'qty-baru' : ''}">
-                            ${item.qty_baru}
-                            ${isEdited ? '<br><small>(edited)</small>' : ''}
-                        </td>
+                        <td class="${isEdited ? 'qty-baru' : ''}">${item.qty_baru}</td>
                         <td>${item.selisih}</td>
                         <td><strong>${item.status}</strong></td>
                         <td>${item.reason || '-'}</td>
@@ -1410,7 +1447,7 @@
             printWindow.print();
         }
 
-        // Export to Excel - VERSI DIPERBAIKI dengan Qty Baru
+        // Export to Excel - VERSI DIPERBAIKI dengan Sales
         function exportToExcel() {
             if (comparisonResults.length === 0) {
                 alert('Tidak ada data untuk diexport!');
@@ -1447,14 +1484,12 @@
             csvContent += `Filter: ${getActiveFiltersText()}\n`;
             csvContent += `Total Data: ${filteredResults.length} item\n\n`;
             
-            // Header kolom - TAMBAHKAN QTY BARU
-            csvContent += "No,Barcode,Nama Barang,Gudang,Qty Opname,Qty Update,Qty Baru,Selisih,Status,Reason\n";
+            // Header kolom - TAMBAHKAN SALES
+            csvContent += "No,Barcode,Nama Barang,Gudang,Sales,Qty Opname,Qty Update,Qty Baru,Selisih,Status,Reason\n";
             
-            // Data - TAMBAHKAN QTY BARU
+            // Data - TAMBAHKAN SALES
             filteredResults.forEach((item, index) => {
-                const isEdited = item.qty_baru !== item.qty_opname;
-                const editedMarker = isEdited ? " (edited)" : "";
-                csvContent += `"${index + 1}","${item.barcode}","${item.nama_barang}","${item.gudang}",${item.qty_opname},${item.qty_update},"${item.qty_baru}${editedMarker}",${item.selisih},"${item.status}","${item.reason || ''}"\n`;
+                csvContent += `"${index + 1}","${item.barcode}","${item.nama_barang}","${item.gudang}",${item.qty_sales},${item.qty_opname},${item.qty_update},${item.qty_baru},${item.selisih},"${item.status}","${item.reason || ''}"\n`;
             });
             
             // Tambahkan summary di akhir
