@@ -6,6 +6,7 @@
     <title>Sistem Stok Opname - Supabase</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
+        /* CSS yang sama seperti sebelumnya */
         * {
             box-sizing: border-box;
             margin: 0;
@@ -365,6 +366,22 @@
         .edited-row {
             background: #f8f9fa !important;
         }
+        
+        /* CSS untuk data recovery */
+        .recovery-notice {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .recovery-notice button {
+            margin: 0;
+        }
     </style>
 </head>
 <body>
@@ -407,6 +424,18 @@
                 <div class="section">
                     <h2>📤 Upload Data untuk Perbandingan</h2>
                     
+                    <!-- Data Recovery Notice -->
+                    <div id="recoveryNotice" class="recovery-notice hidden">
+                        <div>
+                            <strong>⚠️ Data Ditemukan!</strong> Kami menemukan data yang belum tersimpan dari sesi sebelumnya. 
+                            Apakah Anda ingin memulihkannya?
+                        </div>
+                        <div>
+                            <button onclick="recoverData()" class="btn-success">Ya, Pulihkan</button>
+                            <button onclick="discardData()" class="btn-danger">Hapus</button>
+                        </div>
+                    </div>
+                    
                     <div class="summary-grid">
                         <div class="summary-card">
                             <h4>Data Stok Opname</h4>
@@ -444,6 +473,9 @@
 
                     <button onclick="compareData()" class="btn-success" id="compareBtn" disabled>
                         🔍 Mulai Perbandingan
+                    </button>
+                    <button onclick="saveToLocalStorage()" class="btn-info" id="saveLocalBtn" disabled>
+                        💾 Simpan Sementara
                     </button>
                 </div>
             </div>
@@ -501,6 +533,9 @@
                         </button>
                         <button onclick="clearAllFilters()" class="btn-info">
                             🗑️ Hapus Semua Filter
+                        </button>
+                        <button onclick="saveToLocalStorage()" class="btn-info" id="saveLocalBtn2">
+                            💾 Simpan Sementara
                         </button>
                     </div>
 
@@ -627,6 +662,7 @@
             if (session) {
                 currentUser = session.user;
                 showApp();
+                checkForRecoveryData();
             }
         }
 
@@ -651,6 +687,7 @@
 
                 currentUser = data.user;
                 showApp();
+                checkForRecoveryData();
                 
             } catch (error) {
                 messageDiv.innerHTML = `<span style="color: red;">Login gagal: ${error.message}</span>`;
@@ -684,6 +721,93 @@
             document.getElementById('tab' + tabNumber).classList.add('active');
             event.target.classList.add('active');
         }
+
+        // ============================================
+        // FUNGSI BARU: Penyimpanan Data di LocalStorage
+        // ============================================
+
+        // Fungsi untuk menyimpan data ke localStorage
+        function saveToLocalStorage() {
+            const dataToSave = {
+                opnameData: opnameData,
+                stokUpdateData: stokUpdateData,
+                salesData: salesData,
+                comparisonResults: comparisonResults,
+                timestamp: new Date().toISOString()
+            };
+            
+            localStorage.setItem('stokOpnameData', JSON.stringify(dataToSave));
+            
+            // Tampilkan notifikasi
+            alert('✅ Data berhasil disimpan sementara di browser! Data tidak akan hilang saat refresh halaman.');
+            
+            // Update status tombol
+            updateSaveLocalButton();
+        }
+
+        // Fungsi untuk memeriksa apakah ada data yang bisa dipulihkan
+        function checkForRecoveryData() {
+            const savedData = localStorage.getItem('stokOpnameData');
+            if (savedData) {
+                document.getElementById('recoveryNotice').classList.remove('hidden');
+            }
+        }
+
+        // Fungsi untuk memulihkan data dari localStorage
+        function recoverData() {
+            try {
+                const savedData = JSON.parse(localStorage.getItem('stokOpnameData'));
+                
+                if (savedData) {
+                    opnameData = savedData.opnameData || [];
+                    stokUpdateData = savedData.stokUpdateData || [];
+                    salesData = savedData.salesData || [];
+                    comparisonResults = savedData.comparisonResults || [];
+                    
+                    // Update UI
+                    updateUploadSummaries();
+                    updateComparisonTable();
+                    updateReportSummary();
+                    
+                    // Update status tombol
+                    checkReadyForComparison();
+                    updateSaveLocalButton();
+                    
+                    // Sembunyikan notifikasi
+                    document.getElementById('recoveryNotice').classList.add('hidden');
+                    
+                    alert(`✅ Data berhasil dipulihkan! 
+                    - Stok Opname: ${opnameData.length} item
+                    - Stok Update: ${stokUpdateData.length} item
+                    - Sales: ${salesData.length} item
+                    - Hasil Perbandingan: ${comparisonResults.length} item`);
+                }
+            } catch (error) {
+                alert('❌ Error memulihkan data: ' + error.message);
+            }
+        }
+
+        // Fungsi untuk menghapus data dari localStorage
+        function discardData() {
+            if (confirm('Apakah Anda yakin ingin menghapus data yang belum tersimpan?')) {
+                localStorage.removeItem('stokOpnameData');
+                document.getElementById('recoveryNotice').classList.add('hidden');
+                alert('Data sementara telah dihapus.');
+            }
+        }
+
+        // Fungsi untuk mengupdate status tombol simpan sementara
+        function updateSaveLocalButton() {
+            const hasData = opnameData.length > 0 || stokUpdateData.length > 0 || 
+                           salesData.length > 0 || comparisonResults.length > 0;
+            
+            document.getElementById('saveLocalBtn').disabled = !hasData;
+            document.getElementById('saveLocalBtn2').disabled = !hasData;
+        }
+
+        // ============================================
+        // FUNGSI LAINNYA (SAMA SEBELUMNYA)
+        // ============================================
 
         // Filter functions
         function toggleFilter(filterType) {
@@ -781,6 +905,7 @@
                 <p><small>Format terdeteksi: ${Object.keys(opnameData[0] || {}).join(', ')}</small></p>
             `;
             checkReadyForComparison();
+            updateSaveLocalButton();
         }
 
         async function handleStokUpdateUpload(file) {
@@ -794,6 +919,7 @@
                 <p><small>Format terdeteksi: ${Object.keys(stokUpdateData[0] || {}).join(', ')}</small></p>
             `;
             checkReadyForComparison();
+            updateSaveLocalButton();
         }
 
         async function handleSalesUpload(file) {
@@ -806,6 +932,7 @@
                 <p><strong>✅ Data Terupload:</strong> ${salesData.length} records</p>
                 <p><small>Format terdeteksi: ${Object.keys(salesData[0] || {}).join(', ')}</small></p>
             `;
+            updateSaveLocalButton();
         }
 
         // Parse CSV
@@ -842,6 +969,18 @@
         function checkReadyForComparison() {
             const compareBtn = document.getElementById('compareBtn');
             compareBtn.disabled = !(opnameData.length > 0 && stokUpdateData.length > 0);
+        }
+
+        // Update upload summaries
+        function updateUploadSummaries() {
+            document.getElementById('opnameSummary').innerHTML = opnameData.length > 0 ? 
+                `<p><strong>✅ Data Terupload:</strong> ${opnameData.length} records</p>` : '';
+                
+            document.getElementById('stokUpdateSummary').innerHTML = stokUpdateData.length > 0 ? 
+                `<p><strong>✅ Data Terupload:</strong> ${stokUpdateData.length} records</p>` : '';
+                
+            document.getElementById('salesSummary').innerHTML = salesData.length > 0 ? 
+                `<p><strong>✅ Data Terupload:</strong> ${salesData.length} records</p>` : '';
         }
 
         // Fungsi helper untuk mendapatkan value dari berbagai kemungkinan key
@@ -980,6 +1119,7 @@
             updateComparisonTable();
             updateReportSummary();
             document.getElementById('saveBtn').disabled = false;
+            updateSaveLocalButton();
             
             // Switch ke tab hasil perbandingan
             switchTab(2);
@@ -1082,12 +1222,14 @@
             item.updated_at = new Date().toISOString();
             updateComparisonTable();
             updateReportSummary();
+            updateSaveLocalButton();
         }
 
         // Update reason
         function updateReason(index, reason) {
             comparisonResults[index].reason = reason;
             comparisonResults[index].updated_at = new Date().toISOString();
+            updateSaveLocalButton();
         }
 
         // Remove item
@@ -1096,6 +1238,7 @@
                 comparisonResults.splice(index, 1);
                 updateComparisonTable();
                 updateReportSummary();
+                updateSaveLocalButton();
             }
         }
 
@@ -1141,6 +1284,7 @@
             
             updateComparisonTable();
             updateReportSummary();
+            updateSaveLocalButton();
         }
 
         // Save to Supabase
@@ -1161,7 +1305,11 @@
 
                 if (error) throw error;
 
-                alert(`✅ Data berhasil disimpan! ${data ? data.length : 0} records tersimpan.`);
+                // Hapus data dari localStorage setelah berhasil disimpan ke database
+                localStorage.removeItem('stokOpnameData');
+                updateSaveLocalButton();
+
+                alert(`✅ Data berhasil disimpan! ${data ? data.length : 0} records tersimpan. Data sementara telah dihapus.`);
                 
             } catch (error) {
                 alert(`❌ Error menyimpan data: ${error.message}`);
@@ -1182,6 +1330,7 @@
                 updateComparisonTable();
                 updateReportSummary();
                 document.getElementById('saveBtn').disabled = false;
+                updateSaveLocalButton();
                 
                 alert(`✅ Data berhasil dimuat: ${comparisonResults.length} records`);
                 
