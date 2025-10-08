@@ -382,6 +382,29 @@
         .recovery-notice button {
             margin: 0;
         }
+
+        /* CSS untuk debug panel */
+        .debug-panel {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .debug-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #2c3e50;
+        }
+
+        .debug-content {
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
     </style>
 </head>
 <body>
@@ -410,6 +433,21 @@
 
         <h1>📊 SISTEM STOK OPNAME - SUPABASE</h1>
 
+        <!-- Debug Panel -->
+        <div class="section hidden" id="debugSection">
+            <h2>🐛 Debug Information</h2>
+            <div class="debug-panel">
+                <div class="debug-title">Status Koneksi:</div>
+                <div class="debug-content" id="debugStatus">Testing...</div>
+            </div>
+            <div class="debug-panel">
+                <div class="debug-title">Struktur Tabel:</div>
+                <div class="debug-content" id="debugStructure">Loading...</div>
+            </div>
+            <button onclick="toggleDebug()" class="btn-info" id="toggleDebugBtn">🔧 Sembunyikan Debug</button>
+            <button onclick="createTableIfNotExists()" class="btn-warning">📋 Buat Tabel (Manual)</button>
+        </div>
+
         <!-- Tab Navigation -->
         <div class="tab-container">
             <div class="tabs">
@@ -417,6 +455,7 @@
                 <div class="tab" onclick="switchTab(2)">📋 Hasil Perbandingan</div>
                 <div class="tab" onclick="switchTab(3)">🖨️ Laporan</div>
                 <div class="tab" onclick="switchTab(4)">💾 Data Master</div>
+                <div class="tab" onclick="toggleDebug()">🐛 Debug</div>
             </div>
 
             <!-- Tab 1: Upload Data -->
@@ -525,7 +564,7 @@
                         <button onclick="saveToSupabase()" class="btn-success" id="saveBtn" disabled>
                             💾 Simpan ke Database
                         </button>
-                        <button onclick="loadFromSupabase()" class="btn-secondary">
+                        <button onclick="loadFromSupabase()" class="btn-secondary" id="loadBtn">
                             📥 Load dari Database
                         </button>
                         <button onclick="addManualItem()" class="btn-warning">
@@ -663,7 +702,14 @@
                 currentUser = session.user;
                 showApp();
                 checkForRecoveryData();
+                await initializeDebugInfo();
             }
+        }
+
+        // Initialize debug information
+        async function initializeDebugInfo() {
+            await debugSupabaseConnection();
+            await checkTableStructure();
         }
 
         // Login function
@@ -688,6 +734,7 @@
                 currentUser = data.user;
                 showApp();
                 checkForRecoveryData();
+                await initializeDebugInfo();
                 
             } catch (error) {
                 messageDiv.innerHTML = `<span style="color: red;">Login gagal: ${error.message}</span>`;
@@ -722,8 +769,312 @@
             event.target.classList.add('active');
         }
 
+        // Toggle debug panel
+        function toggleDebug() {
+            const debugSection = document.getElementById('debugSection');
+            const toggleBtn = document.getElementById('toggleDebugBtn');
+            
+            if (debugSection.classList.contains('hidden')) {
+                debugSection.classList.remove('hidden');
+                toggleBtn.textContent = '🔧 Sembunyikan Debug';
+                // Switch to debug tab
+                switchTab(1); // Kembali ke tab 1, debug akan muncul di atas
+            } else {
+                debugSection.classList.add('hidden');
+                toggleBtn.textContent = '🔧 Tampilkan Debug';
+            }
+        }
+
         // ============================================
-        // FUNGSI BARU: Penyimpanan Data di LocalStorage
+        // FUNGSI BARU: Debug dan Troubleshooting
+        // ============================================
+
+        // Fungsi untuk debugging koneksi Supabase
+        async function debugSupabaseConnection() {
+            const debugStatus = document.getElementById('debugStatus');
+            
+            try {
+                debugStatus.innerHTML = '🔄 Testing koneksi Supabase...';
+                
+                // Test basic query
+                const { data, error } = await supabase
+                    .from('stok_opname')
+                    .select('*')
+                    .limit(1);
+                    
+                if (error) {
+                    if (error.message.includes('does not exist')) {
+                        debugStatus.innerHTML = '❌ Tabel "stok_opname" belum ada di database';
+                    } else if (error.message.includes('JWT')) {
+                        debugStatus.innerHTML = '❌ Masalah autentikasi. Silakan login ulang.';
+                    } else {
+                        debugStatus.innerHTML = `❌ Error koneksi: ${error.message}`;
+                    }
+                    return false;
+                }
+                
+                debugStatus.innerHTML = '✅ Koneksi Supabase berhasil!';
+                return true;
+                
+            } catch (error) {
+                debugStatus.innerHTML = `❌ Error: ${error.message}`;
+                return false;
+            }
+        }
+
+        // Fungsi untuk mengecek struktur tabel
+        async function checkTableStructure() {
+            const debugStructure = document.getElementById('debugStructure');
+            
+            try {
+                debugStructure.innerHTML = '🔄 Mengecek struktur tabel...';
+                
+                // Coba ambil satu record untuk melihat struktur
+                const { data, error } = await supabase
+                    .from('stok_opname')
+                    .select('*')
+                    .limit(1);
+
+                if (error) {
+                    if (error.message.includes('does not exist')) {
+                        debugStructure.innerHTML = 'Tabel "stok_opname" belum ada. Gunakan tombol "Buat Tabel" untuk membuatnya.';
+                    } else {
+                        debugStructure.innerHTML = `Error: ${error.message}`;
+                    }
+                    return [];
+                }
+                
+                if (data.length > 0) {
+                    const columns = Object.keys(data[0]);
+                    debugStructure.innerHTML = `Kolom yang tersedia:\n${columns.join(', ')}`;
+                    return columns;
+                } else {
+                    debugStructure.innerHTML = 'Tabel ada tetapi kosong. Struktur akan terdeteksi saat ada data.';
+                    return [];
+                }
+                
+            } catch (error) {
+                debugStructure.innerHTML = `Error: ${error.message}`;
+                return [];
+            }
+        }
+
+        // Fungsi untuk memberikan panduan membuat tabel
+        function createTableIfNotExists() {
+            const sqlQuery = `
+-- JALANKAN QUERY INI DI SQL EDITOR SUPABASE ANDA:
+
+CREATE TABLE IF NOT EXISTS stok_opname (
+    id BIGSERIAL PRIMARY KEY,
+    barcode VARCHAR NOT NULL,
+    nama_barang VARCHAR NOT NULL,
+    gudang VARCHAR DEFAULT 'Gudang Utama',
+    qty_sales INTEGER DEFAULT 0,
+    qty_opname INTEGER DEFAULT 0,
+    qty_update INTEGER DEFAULT 0,
+    qty_baru INTEGER DEFAULT 0,
+    selisih INTEGER DEFAULT 0,
+    status VARCHAR DEFAULT 'SESUAI',
+    status_class VARCHAR DEFAULT 'status-match',
+    reason TEXT DEFAULT '',
+    created_by VARCHAR,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(barcode, gudang)
+);
+
+-- Enable RLS jika diperlukan
+ALTER TABLE stok_opname ENABLE ROW LEVEL SECURITY;
+
+-- Policy untuk allow all (sementara untuk testing)
+CREATE POLICY "Allow all operations" ON stok_opname
+FOR ALL USING (true);
+
+-- Buat index untuk performa
+CREATE INDEX IF NOT EXISTS idx_stok_opname_barcode ON stok_opname(barcode);
+CREATE INDEX IF NOT EXISTS idx_stok_opname_gudang ON stok_opname(gudang);
+CREATE INDEX IF NOT EXISTS idx_stok_opname_updated ON stok_opname(updated_at);
+            `;
+            
+            alert('Salin query berikut dan jalankan di SQL Editor Supabase:\n\n' + sqlQuery);
+            console.log('SQL Query untuk membuat tabel:', sqlQuery);
+        }
+
+        // ============================================
+        // FUNGSI UTAMA YANG DIPERBAIKI
+        // ============================================
+
+        // Save to Supabase - VERSI DIPERBAIKI
+        async function saveToSupabase() {
+            if (comparisonResults.length === 0) {
+                alert('Tidak ada data untuk disimpan!');
+                return;
+            }
+
+            try {
+                // Tampilkan loading state
+                const saveBtn = document.getElementById('saveBtn');
+                const originalText = saveBtn.innerHTML;
+                saveBtn.innerHTML = '⏳ Menyimpan...';
+                saveBtn.disabled = true;
+
+                console.log('Data yang akan disimpan:', comparisonResults);
+
+                // Validasi data sebelum menyimpan
+                const validData = comparisonResults.map(item => {
+                    // Pastikan semua field required ada
+                    return {
+                        barcode: item.barcode || 'UNKNOWN',
+                        nama_barang: item.nama_barang || 'Unknown Product',
+                        gudang: item.gudang || 'Gudang Utama',
+                        qty_sales: parseInt(item.qty_sales) || 0,
+                        qty_opname: parseInt(item.qty_opname) || 0,
+                        qty_update: parseInt(item.qty_update) || 0,
+                        qty_baru: parseInt(item.qty_baru) || 0,
+                        selisih: parseInt(item.selisih) || 0,
+                        status: item.status || 'UNKNOWN',
+                        status_class: item.status_class || 'status-match',
+                        reason: item.reason || '',
+                        created_by: currentUser.email,
+                        updated_at: new Date().toISOString(),
+                        // Tambahkan timestamp untuk tracking
+                        created_at: item.created_at || new Date().toISOString()
+                    };
+                });
+
+                console.log('Data setelah validasi:', validData);
+
+                // Coba beberapa strategi penyimpanan
+                let result;
+                let error;
+                
+                try {
+                    // STRATEGI 1: Insert dengan onConflict
+                    const { data, error: insertError } = await supabase
+                        .from('stok_opname')
+                        .upsert(validData, { 
+                            onConflict: 'barcode,gudang'
+                        })
+                        .select();
+
+                    result = data;
+                    error = insertError;
+                } catch (firstError) {
+                    console.log('Strategi 1 gagal:', firstError);
+                    
+                    // STRATEGI 2: Coba insert biasa
+                    try {
+                        const { data, error: secondError } = await supabase
+                            .from('stok_opname')
+                            .insert(validData)
+                            .select();
+                        
+                        result = data;
+                        error = secondError;
+                    } catch (secondError) {
+                        console.log('Strategi 2 gagal:', secondError);
+                        throw secondError;
+                    }
+                }
+
+                if (error) {
+                    console.error('Error detail:', error);
+                    
+                    // Cek jika error karena struktur tabel
+                    if (error.message.includes('column') && error.message.includes('does not exist')) {
+                        throw new Error(`Kolom tidak ditemukan di database. Pastikan struktur tabel sesuai. Detail: ${error.message}`);
+                    }
+                    
+                    throw error;
+                }
+
+                // Hapus data dari localStorage setelah berhasil disimpan ke database
+                localStorage.removeItem('stokOpnameData');
+                updateSaveLocalButton();
+
+                // Update tombol
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+
+                alert(`✅ Data berhasil disimpan! ${result ? result.length : validData.length} records tersimpan. Data sementara telah dihapus.`);
+                
+            } catch (error) {
+                // Reset tombol
+                const saveBtn = document.getElementById('saveBtn');
+                saveBtn.innerHTML = '💾 Simpan ke Database';
+                saveBtn.disabled = false;
+                
+                console.error('Full error:', error);
+                
+                // Tampilkan pesan error yang lebih informatif
+                let errorMessage = `❌ Error menyimpan data: ${error.message}`;
+                
+                if (error.message.includes('JWT')) {
+                    errorMessage += '\n\n⚠️ Session login mungkin telah habis. Silakan logout dan login kembali.';
+                } else if (error.message.includes('column')) {
+                    errorMessage += '\n\n🔧 Pastikan struktur tabel di Supabase sesuai dengan field yang dikirim.';
+                    errorMessage += '\nGunakan tombol "Buat Tabel" di panel Debug.';
+                } else if (error.message.includes('network') || error.message.includes('fetch')) {
+                    errorMessage += '\n\n🌐 Masalah koneksi internet. Periksa koneksi Anda.';
+                } else if (error.message.includes('does not exist')) {
+                    errorMessage += '\n\n📋 Tabel "stok_opname" belum dibuat. Silakan buat tabel terlebih dahulu di Supabase.';
+                    errorMessage += '\nGunakan tombol "Buat Tabel" di panel Debug.';
+                }
+                
+                alert(errorMessage);
+            }
+        }
+
+        // Load from Supabase - VERSI DIPERBAIKI
+        async function loadFromSupabase() {
+            try {
+                // Tampilkan loading
+                const loadBtn = document.getElementById('loadBtn');
+                const originalText = loadBtn.innerHTML;
+                loadBtn.innerHTML = '⏳ Memuat...';
+                loadBtn.disabled = true;
+                
+                const { data, error } = await supabase
+                    .from('stok_opname')
+                    .select('*')
+                    .order('updated_at', { ascending: false })
+                    .limit(1000); // Batasi hasil
+
+                if (error) throw error;
+
+                comparisonResults = data || [];
+                updateComparisonTable();
+                updateReportSummary();
+                document.getElementById('saveBtn').disabled = false;
+                updateSaveLocalButton();
+                
+                // Reset tombol
+                loadBtn.innerHTML = originalText;
+                loadBtn.disabled = false;
+                
+                alert(`✅ Data berhasil dimuat: ${comparisonResults.length} records`);
+                
+            } catch (error) {
+                console.error('Error loading data:', error);
+                
+                // Reset tombol
+                const loadBtn = document.getElementById('loadBtn');
+                loadBtn.innerHTML = '📥 Load dari Database';
+                loadBtn.disabled = false;
+                
+                let errorMessage = `❌ Error memuat data: ${error.message}`;
+                
+                if (error.message.includes('does not exist')) {
+                    errorMessage += '\n\n📋 Tabel "stok_opname" belum dibuat. Silakan buat tabel terlebih dahulu di Supabase.';
+                    errorMessage += '\nGunakan tombol "Buat Tabel" di panel Debug.';
+                }
+                
+                alert(errorMessage);
+            }
+        }
+
+        // ============================================
+        // FUNGSI LAINNYA YANG TETAP SAMA
         // ============================================
 
         // Fungsi untuk menyimpan data ke localStorage
@@ -804,10 +1155,6 @@
             document.getElementById('saveLocalBtn').disabled = !hasData;
             document.getElementById('saveLocalBtn2').disabled = !hasData;
         }
-
-        // ============================================
-        // FUNGSI LAINNYA (SAMA SEBELUMNYA)
-        // ============================================
 
         // Filter functions
         function toggleFilter(filterType) {
@@ -993,7 +1340,7 @@
             return '';
         }
 
-        // Compare data - VERSI DIPERBAIKI dengan support multiple column names dan sales
+        // Compare data
         function compareData() {
             comparisonResults = [];
             
@@ -1125,7 +1472,7 @@
             switchTab(2);
         }
 
-        // Update comparison table with filters - VERSI DIPERBAIKI tanpa tulisan edit
+        // Update comparison table with filters
         function updateComparisonTable() {
             const tbody = document.getElementById('comparisonBody');
             tbody.innerHTML = '';
@@ -1287,58 +1634,6 @@
             updateSaveLocalButton();
         }
 
-        // Save to Supabase
-        async function saveToSupabase() {
-            if (comparisonResults.length === 0) {
-                alert('Tidak ada data untuk disimpan!');
-                return;
-            }
-
-            try {
-                // Save to stok_opname table
-                const { data, error } = await supabase
-                    .from('stok_opname')
-                    .upsert(comparisonResults, { 
-                        onConflict: 'barcode,gudang',
-                        ignoreDuplicates: false 
-                    });
-
-                if (error) throw error;
-
-                // Hapus data dari localStorage setelah berhasil disimpan ke database
-                localStorage.removeItem('stokOpnameData');
-                updateSaveLocalButton();
-
-                alert(`✅ Data berhasil disimpan! ${data ? data.length : 0} records tersimpan. Data sementara telah dihapus.`);
-                
-            } catch (error) {
-                alert(`❌ Error menyimpan data: ${error.message}`);
-            }
-        }
-
-        // Load from Supabase
-        async function loadFromSupabase() {
-            try {
-                const { data, error } = await supabase
-                    .from('stok_opname')
-                    .select('*')
-                    .order('updated_at', { ascending: false });
-
-                if (error) throw error;
-
-                comparisonResults = data || [];
-                updateComparisonTable();
-                updateReportSummary();
-                document.getElementById('saveBtn').disabled = false;
-                updateSaveLocalButton();
-                
-                alert(`✅ Data berhasil dimuat: ${comparisonResults.length} records`);
-                
-            } catch (error) {
-                alert(`❌ Error memuat data: ${error.message}`);
-            }
-        }
-
         // Load master data
         async function loadMasterData() {
             try {
@@ -1441,7 +1736,7 @@
             `;
         }
 
-        // Generate report - VERSI DIPERBAIKI dengan Sales dan tanpa tulisan edit
+        // Generate report
         function generateReport() {
             // Apply current filters to report
             let filteredResults = comparisonResults.filter(item => {
@@ -1596,7 +1891,7 @@
             printWindow.print();
         }
 
-        // Export to Excel - VERSI DIPERBAIKI dengan Sales
+        // Export to Excel
         function exportToExcel() {
             if (comparisonResults.length === 0) {
                 alert('Tidak ada data untuk diexport!');
@@ -1633,10 +1928,10 @@
             csvContent += `Filter: ${getActiveFiltersText()}\n`;
             csvContent += `Total Data: ${filteredResults.length} item\n\n`;
             
-            // Header kolom - TAMBAHKAN SALES
+            // Header kolom
             csvContent += "No,Barcode,Nama Barang,Gudang,Sales,Qty Opname,Qty Update,Qty Baru,Selisih,Status,Reason\n";
             
-            // Data - TAMBAHKAN SALES
+            // Data
             filteredResults.forEach((item, index) => {
                 csvContent += `"${index + 1}","${item.barcode}","${item.nama_barang}","${item.gudang}",${item.qty_sales},${item.qty_opname},${item.qty_update},${item.qty_baru},${item.selisih},"${item.status}","${item.reason || ''}"\n`;
             });
