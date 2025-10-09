@@ -406,25 +406,7 @@
             white-space: pre-wrap;
         }
 
-        /* CSS untuk pagination */
-        .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            margin: 20px 0;
-            gap: 10px;
-        }
-
-        .pagination button {
-            padding: 8px 12px;
-            margin: 0;
-        }
-
-        .pagination-info {
-            font-size: 14px;
-            color: #666;
-        }
-
+        /* CSS untuk progress bar */
         .progress-bar {
             width: 100%;
             height: 20px;
@@ -445,6 +427,24 @@
             padding: 10px;
             font-size: 14px;
             color: #666;
+        }
+
+        /* CSS untuk scrollable table */
+        .table-container {
+            max-height: 70vh;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        .table-container table {
+            margin-top: 0;
+        }
+
+        .table-container th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
     </style>
 </head>
@@ -609,7 +609,7 @@
                             📥 Load SEMUA Data dari Database
                         </button>
                         <button onclick="loadFromSupabase()" class="btn-secondary" id="loadBtn">
-                            📥 Load Data Baru Saja
+                            📥 Load Data Terbaru (1000 data)
                         </button>
                         <button onclick="addManualItem()" class="btn-warning">
                             ➕ Tambah Barang Manual
@@ -635,49 +635,37 @@
                         </div>
                     </div>
 
-                    <!-- Pagination Controls -->
-                    <div id="paginationControls" class="pagination hidden">
-                        <button onclick="previousPage()" id="prevBtn" class="btn-secondary">⬅️ Sebelumnya</button>
-                        <span class="pagination-info" id="pageInfo">Halaman 1 dari 1</span>
-                        <button onclick="nextPage()" id="nextBtn" class="btn-secondary">Selanjutnya ➡️</button>
-                    </div>
-
                     <div style="margin: 10px 0; font-size: 14px; color: #666;">
                         Menampilkan <span id="displayCount">0</span> dari <span id="totalCount">0</span> barang
-                        <span id="pageInfoSmall" class="pagination-info"></span>
                     </div>
 
-                    <table id="comparisonTable">
-                        <thead>
-                            <tr>
-                                <th>No</th>
-                                <th>Barcode</th>
-                                <th>Nama Barang</th>
-                                <th>Gudang</th>
-                                <th>Sales</th>
-                                <th>Qty Opname</th>
-                                <th>Qty Update</th>
-                                <th>Selisih</th>
-                                <th>Status</th>
-                                <th>Qty Baru</th>
-                                <th>Reason</th>
-                                <th>Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody id="comparisonBody">
-                            <tr>
-                                <td colspan="12" style="text-align: center; padding: 20px;">
-                                    Belum ada data. Upload data dan lakukan perbandingan terlebih dahulu.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-
-                    <!-- Pagination Controls Bottom -->
-                    <div id="paginationControlsBottom" class="pagination hidden">
-                        <button onclick="previousPage()" id="prevBtnBottom" class="btn-secondary">⬅️ Sebelumnya</button>
-                        <span class="pagination-info" id="pageInfoBottom">Halaman 1 dari 1</span>
-                        <button onclick="nextPage()" id="nextBtnBottom" class="btn-secondary">Selanjutnya ➡️</button>
+                    <!-- Table Container dengan Scroll -->
+                    <div class="table-container">
+                        <table id="comparisonTable">
+                            <thead>
+                                <tr>
+                                    <th>No</th>
+                                    <th>Barcode</th>
+                                    <th>Nama Barang</th>
+                                    <th>Gudang</th>
+                                    <th>Sales</th>
+                                    <th>Qty Opname</th>
+                                    <th>Qty Update</th>
+                                    <th>Selisih</th>
+                                    <th>Status</th>
+                                    <th>Qty Baru</th>
+                                    <th>Reason</th>
+                                    <th>Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="comparisonBody">
+                                <tr>
+                                    <td colspan="12" style="text-align: center; padding: 20px;">
+                                        Belum ada data. Upload data dan lakukan perbandingan terlebih dahulu.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -766,11 +754,6 @@
             minus: true
         };
         let searchTerm = '';
-
-        // Pagination variables
-        let currentPage = 1;
-        let itemsPerPage = 100; // Jumlah item per halaman
-        let totalPages = 1;
 
         // Check if user is already logged in
         async function checkAuth() {
@@ -863,7 +846,7 @@
         }
 
         // ============================================
-        // FUNGSI BARU: Load Data Tanpa Batasan
+        // FUNGSI UTAMA: Load Data Tanpa Batasan
         // ============================================
 
         // Fungsi untuk memuat SEMUA data dari database tanpa batasan
@@ -964,91 +947,52 @@
             }
         }
 
-        // Fungsi untuk memuat data dengan pagination (untuk data yang sangat besar)
-        async function loadFromSupabaseWithPagination(page = 0, pageSize = 1000) {
+        // Load from Supabase - VERSI ASLI (untuk data terbaru saja)
+        async function loadFromSupabase() {
             try {
-                const { data, error, count } = await supabase
+                // Tampilkan loading
+                const loadBtn = document.getElementById('loadBtn');
+                const originalText = loadBtn.innerHTML;
+                loadBtn.innerHTML = '⏳ Memuat...';
+                loadBtn.disabled = true;
+                
+                const { data, error } = await supabase
                     .from('stok_opname')
-                    .select('*', { count: 'exact' })
+                    .select('*')
                     .order('updated_at', { ascending: false })
-                    .range(page * pageSize, (page + 1) * pageSize - 1);
+                    .limit(1000); // Batasi hasil untuk data terbaru
 
                 if (error) throw error;
 
-                return {
-                    data: data || [],
-                    totalCount: count || 0,
-                    hasMore: data && data.length === pageSize
-                };
+                comparisonResults = data || [];
+                updateComparisonTable();
+                updateReportSummary();
+                document.getElementById('saveBtn').disabled = false;
+                updateSaveLocalButton();
+                
+                // Reset tombol
+                loadBtn.innerHTML = originalText;
+                loadBtn.disabled = false;
+                
+                alert(`✅ Data berhasil dimuat: ${comparisonResults.length} records (data terbaru saja)`);
                 
             } catch (error) {
-                console.error('Error loading data with pagination:', error);
-                throw error;
+                console.error('Error loading data:', error);
+                
+                // Reset tombol
+                const loadBtn = document.getElementById('loadBtn');
+                loadBtn.innerHTML = '📥 Load Data Terbaru (1000 data)';
+                loadBtn.disabled = false;
+                
+                let errorMessage = `❌ Error memuat data: ${error.message}`;
+                
+                if (error.message.includes('does not exist')) {
+                    errorMessage += '\n\n📋 Tabel "stok_opname" belum dibuat. Silakan buat tabel terlebih dahulu di Supabase.';
+                    errorMessage += '\nGunakan tombol "Buat Tabel" di panel Debug.';
+                }
+                
+                alert(errorMessage);
             }
-        }
-
-        // ============================================
-        // FUNGSI PAGINATION UNTUK TABEL
-        // ============================================
-
-        // Fungsi untuk mengatur pagination
-        function setupPagination() {
-            totalPages = Math.ceil(comparisonResults.length / itemsPerPage);
-            currentPage = 1;
-            
-            const paginationControls = document.getElementById('paginationControls');
-            const paginationControlsBottom = document.getElementById('paginationControlsBottom');
-            const pageInfoSmall = document.getElementById('pageInfoSmall');
-            
-            if (totalPages > 1) {
-                paginationControls.classList.remove('hidden');
-                paginationControlsBottom.classList.remove('hidden');
-                pageInfoSmall.textContent = `(Halaman ${currentPage} dari ${totalPages})`;
-            } else {
-                paginationControls.classList.add('hidden');
-                paginationControlsBottom.classList.add('hidden');
-                pageInfoSmall.textContent = '';
-            }
-            
-            updatePaginationButtons();
-            updatePageInfo();
-        }
-
-        // Fungsi untuk menampilkan halaman tertentu
-        function showPage(page) {
-            currentPage = Math.max(1, Math.min(page, totalPages));
-            updateComparisonTable();
-            updatePaginationButtons();
-            updatePageInfo();
-        }
-
-        // Fungsi untuk halaman berikutnya
-        function nextPage() {
-            if (currentPage < totalPages) {
-                showPage(currentPage + 1);
-            }
-        }
-
-        // Fungsi untuk halaman sebelumnya
-        function previousPage() {
-            if (currentPage > 1) {
-                showPage(currentPage - 1);
-            }
-        }
-
-        // Update status tombol pagination
-        function updatePaginationButtons() {
-            document.getElementById('prevBtn').disabled = currentPage <= 1;
-            document.getElementById('nextBtn').disabled = currentPage >= totalPages;
-            document.getElementById('prevBtnBottom').disabled = currentPage <= 1;
-            document.getElementById('nextBtnBottom').disabled = currentPage >= totalPages;
-        }
-
-        // Update info halaman
-        function updatePageInfo() {
-            document.getElementById('pageInfo').textContent = `Halaman ${currentPage} dari ${totalPages}`;
-            document.getElementById('pageInfoBottom').textContent = `Halaman ${currentPage} dari ${totalPages}`;
-            document.getElementById('pageInfoSmall').textContent = totalPages > 1 ? `(Halaman ${currentPage} dari ${totalPages})` : '';
         }
 
         // ============================================
@@ -1166,54 +1110,6 @@ CREATE INDEX IF NOT EXISTS idx_stok_opname_updated ON stok_opname(updated_at);
             console.log('SQL Query untuk membuat tabel:', sqlQuery);
         }
 
-        // Load from Supabase - VERSI ASLI (untuk data terbaru saja)
-        async function loadFromSupabase() {
-            try {
-                // Tampilkan loading
-                const loadBtn = document.getElementById('loadBtn');
-                const originalText = loadBtn.innerHTML;
-                loadBtn.innerHTML = '⏳ Memuat...';
-                loadBtn.disabled = true;
-                
-                const { data, error } = await supabase
-                    .from('stok_opname')
-                    .select('*')
-                    .order('updated_at', { ascending: false })
-                    .limit(1000); // Batasi hasil untuk data terbaru
-
-                if (error) throw error;
-
-                comparisonResults = data || [];
-                updateComparisonTable();
-                updateReportSummary();
-                document.getElementById('saveBtn').disabled = false;
-                updateSaveLocalButton();
-                
-                // Reset tombol
-                loadBtn.innerHTML = originalText;
-                loadBtn.disabled = false;
-                
-                alert(`✅ Data berhasil dimuat: ${comparisonResults.length} records (data terbaru saja)`);
-                
-            } catch (error) {
-                console.error('Error loading data:', error);
-                
-                // Reset tombol
-                const loadBtn = document.getElementById('loadBtn');
-                loadBtn.innerHTML = '📥 Load Data Baru Saja';
-                loadBtn.disabled = false;
-                
-                let errorMessage = `❌ Error memuat data: ${error.message}`;
-                
-                if (error.message.includes('does not exist')) {
-                    errorMessage += '\n\n📋 Tabel "stok_opname" belum dibuat. Silakan buat tabel terlebih dahulu di Supabase.';
-                    errorMessage += '\nGunakan tombol "Buat Tabel" di panel Debug.';
-                }
-                
-                alert(errorMessage);
-            }
-        }
-
         // Save to Supabase - VERSI DIPERBAIKI
         async function saveToSupabase() {
             if (comparisonResults.length === 0) {
@@ -1314,6 +1210,168 @@ CREATE INDEX IF NOT EXISTS idx_stok_opname_updated ON stok_opname(updated_at);
                 
                 alert(errorMessage);
             }
+        }
+
+        // Update comparison table with filters (TANPA PAGINATION)
+        function updateComparisonTable() {
+            const tbody = document.getElementById('comparisonBody');
+            tbody.innerHTML = '';
+            
+            if (comparisonResults.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 20px;">Belum ada data.</td></tr>';
+                document.getElementById('displayCount').textContent = '0';
+                document.getElementById('totalCount').textContent = '0';
+                return;
+            }
+            
+            // Apply filters
+            let filteredResults = comparisonResults.filter(item => {
+                // Status filter
+                let statusMatch = false;
+                if (item.selisih === 0 && activeFilters.match) statusMatch = true;
+                if (item.selisih > 0 && activeFilters.plus) statusMatch = true;
+                if (item.selisih < 0 && activeFilters.minus) statusMatch = true;
+                
+                if (!statusMatch) return false;
+                
+                // Search filter
+                if (searchTerm) {
+                    const searchMatch = item.barcode.toLowerCase().includes(searchTerm) || 
+                                      item.nama_barang.toLowerCase().includes(searchTerm) ||
+                                      item.gudang.toLowerCase().includes(searchTerm);
+                    if (!searchMatch) return false;
+                }
+                
+                return true;
+            });
+            
+            // Update counts
+            document.getElementById('displayCount').textContent = filteredResults.length;
+            document.getElementById('totalCount').textContent = comparisonResults.length;
+            
+            if (filteredResults.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 20px;">Tidak ada data yang sesuai dengan filter.</td></tr>';
+                return;
+            }
+            
+            // Display ALL results (tanpa pagination)
+            filteredResults.forEach((item, index) => {
+                const isEdited = item.qty_baru !== item.qty_opname;
+                const row = document.createElement('tr');
+                if (isEdited) {
+                    row.className = 'edited-row';
+                }
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td>${item.barcode}</td>
+                    <td>${item.nama_barang}</td>
+                    <td>${item.gudang}</td>
+                    <td>${item.qty_sales}</td>
+                    <td>${item.qty_opname}</td>
+                    <td>${item.qty_update}</td>
+                    <td>${item.selisih}</td>
+                    <td class="${item.status_class}">${item.status}</td>
+                    <td>
+                        <input type="number" value="${item.qty_baru}" class="editable"
+                               onchange="updateQtyBaru(${comparisonResults.indexOf(item)}, this.value)">
+                    </td>
+                    <td>
+                        <textarea onchange="updateReason(${comparisonResults.indexOf(item)}, this.value)" 
+                                  style="width: 100%; height: 40px; padding: 5px; font-size: 12px;">${item.reason}</textarea>
+                    </td>
+                    <td>
+                        <button onclick="removeItem(${comparisonResults.indexOf(item)})" class="btn-danger">Hapus</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // Update quantity
+        function updateQtyBaru(index, newQty) {
+            const item = comparisonResults[index];
+            const qtyBaru = parseInt(newQty) || 0;
+            
+            item.qty_baru = qtyBaru;
+            item.selisih = qtyBaru - item.qty_update;
+            
+            if (item.selisih === 0) {
+                item.status = 'SESUAI';
+                item.status_class = 'status-match';
+            } else if (item.selisih > 0) {
+                item.status = `LEBIH +${item.selisih}`;
+                item.status_class = 'status-plus';
+            } else {
+                item.status = `KURANG ${item.selisih}`;
+                item.status_class = 'status-minus';
+            }
+            
+            item.updated_at = new Date().toISOString();
+            updateComparisonTable();
+            updateReportSummary();
+            updateSaveLocalButton();
+        }
+
+        // Update reason
+        function updateReason(index, reason) {
+            comparisonResults[index].reason = reason;
+            comparisonResults[index].updated_at = new Date().toISOString();
+            updateSaveLocalButton();
+        }
+
+        // Remove item
+        function removeItem(index) {
+            if (confirm('Hapus item ini?')) {
+                comparisonResults.splice(index, 1);
+                updateComparisonTable();
+                updateReportSummary();
+                updateSaveLocalButton();
+            }
+        }
+
+        // Add manual item
+        function addManualItem() {
+            const barcode = prompt('Barcode:');
+            if (!barcode) return;
+            
+            const namaBarang = prompt('Nama Barang:');
+            const gudang = prompt('Gudang:', 'Gudang Utama');
+            const qtySales = parseInt(prompt('Qty Sales:', '0')) || 0;
+            const qtyBaru = parseInt(prompt('Qty Opname:', '0')) || 0;
+            const qtyUpdate = parseInt(prompt('Qty Update:', '0')) || 0;
+            
+            const selisih = qtyBaru - qtyUpdate;
+            let status = 'SESUAI';
+            let statusClass = 'status-match';
+            
+            if (selisih > 0) {
+                status = `LEBIH +${selisih}`;
+                statusClass = 'status-plus';
+            } else if (selisih < 0) {
+                status = `KURANG ${selisih}`;
+                statusClass = 'status-minus';
+            }
+            
+            comparisonResults.push({
+                id: comparisonResults.length + 1,
+                barcode: barcode,
+                nama_barang: namaBarang,
+                gudang: gudang,
+                qty_sales: qtySales,
+                qty_opname: qtyBaru,
+                qty_update: qtyUpdate,
+                qty_baru: qtyBaru,
+                selisih: selisih,
+                status: status,
+                status_class: statusClass,
+                reason: 'Manual entry',
+                created_by: currentUser.email,
+                updated_at: new Date().toISOString()
+            });
+            
+            updateComparisonTable();
+            updateReportSummary();
+            updateSaveLocalButton();
         }
 
         // Fungsi untuk menyimpan data ke localStorage
@@ -1477,178 +1535,6 @@ CREATE INDEX IF NOT EXISTS idx_stok_opname_updated ON stok_opname(updated_at);
                 tag.innerHTML = `${filter} <span class="remove" onclick="clearAllFilters()">×</span>`;
                 activeFiltersContainer.appendChild(tag);
             });
-        }
-
-        // Update comparison table with filters and pagination
-        function updateComparisonTable() {
-            const tbody = document.getElementById('comparisonBody');
-            tbody.innerHTML = '';
-            
-            if (comparisonResults.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 20px;">Belum ada data.</td></tr>';
-                document.getElementById('displayCount').textContent = '0';
-                document.getElementById('totalCount').textContent = '0';
-                setupPagination();
-                return;
-            }
-            
-            // Apply filters
-            let filteredResults = comparisonResults.filter(item => {
-                // Status filter
-                let statusMatch = false;
-                if (item.selisih === 0 && activeFilters.match) statusMatch = true;
-                if (item.selisih > 0 && activeFilters.plus) statusMatch = true;
-                if (item.selisih < 0 && activeFilters.minus) statusMatch = true;
-                
-                if (!statusMatch) return false;
-                
-                // Search filter
-                if (searchTerm) {
-                    const searchMatch = item.barcode.toLowerCase().includes(searchTerm) || 
-                                      item.nama_barang.toLowerCase().includes(searchTerm) ||
-                                      item.gudang.toLowerCase().includes(searchTerm);
-                    if (!searchMatch) return false;
-                }
-                
-                return true;
-            });
-            
-            // Setup pagination
-            setupPagination();
-            
-            // Calculate pagination
-            const startIndex = (currentPage - 1) * itemsPerPage;
-            const endIndex = Math.min(startIndex + itemsPerPage, filteredResults.length);
-            const paginatedResults = filteredResults.slice(startIndex, endIndex);
-            
-            // Update counts
-            document.getElementById('displayCount').textContent = filteredResults.length;
-            document.getElementById('totalCount').textContent = comparisonResults.length;
-            
-            if (paginatedResults.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 20px;">Tidak ada data yang sesuai dengan filter.</td></tr>';
-                return;
-            }
-            
-            // Display paginated results
-            paginatedResults.forEach((item, index) => {
-                const globalIndex = startIndex + index;
-                const isEdited = item.qty_baru !== item.qty_opname;
-                const row = document.createElement('tr');
-                if (isEdited) {
-                    row.className = 'edited-row';
-                }
-                row.innerHTML = `
-                    <td>${globalIndex + 1}</td>
-                    <td>${item.barcode}</td>
-                    <td>${item.nama_barang}</td>
-                    <td>${item.gudang}</td>
-                    <td>${item.qty_sales}</td>
-                    <td>${item.qty_opname}</td>
-                    <td>${item.qty_update}</td>
-                    <td>${item.selisih}</td>
-                    <td class="${item.status_class}">${item.status}</td>
-                    <td>
-                        <input type="number" value="${item.qty_baru}" class="editable"
-                               onchange="updateQtyBaru(${comparisonResults.indexOf(item)}, this.value)">
-                    </td>
-                    <td>
-                        <textarea onchange="updateReason(${comparisonResults.indexOf(item)}, this.value)" 
-                                  style="width: 100%; height: 40px; padding: 5px; font-size: 12px;">${item.reason}</textarea>
-                    </td>
-                    <td>
-                        <button onclick="removeItem(${comparisonResults.indexOf(item)})" class="btn-danger">Hapus</button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
-
-        // Update quantity
-        function updateQtyBaru(index, newQty) {
-            const item = comparisonResults[index];
-            const qtyBaru = parseInt(newQty) || 0;
-            
-            item.qty_baru = qtyBaru;
-            item.selisih = qtyBaru - item.qty_update;
-            
-            if (item.selisih === 0) {
-                item.status = 'SESUAI';
-                item.status_class = 'status-match';
-            } else if (item.selisih > 0) {
-                item.status = `LEBIH +${item.selisih}`;
-                item.status_class = 'status-plus';
-            } else {
-                item.status = `KURANG ${item.selisih}`;
-                item.status_class = 'status-minus';
-            }
-            
-            item.updated_at = new Date().toISOString();
-            updateComparisonTable();
-            updateReportSummary();
-            updateSaveLocalButton();
-        }
-
-        // Update reason
-        function updateReason(index, reason) {
-            comparisonResults[index].reason = reason;
-            comparisonResults[index].updated_at = new Date().toISOString();
-            updateSaveLocalButton();
-        }
-
-        // Remove item
-        function removeItem(index) {
-            if (confirm('Hapus item ini?')) {
-                comparisonResults.splice(index, 1);
-                updateComparisonTable();
-                updateReportSummary();
-                updateSaveLocalButton();
-            }
-        }
-
-        // Add manual item
-        function addManualItem() {
-            const barcode = prompt('Barcode:');
-            if (!barcode) return;
-            
-            const namaBarang = prompt('Nama Barang:');
-            const gudang = prompt('Gudang:', 'Gudang Utama');
-            const qtySales = parseInt(prompt('Qty Sales:', '0')) || 0;
-            const qtyBaru = parseInt(prompt('Qty Opname:', '0')) || 0;
-            const qtyUpdate = parseInt(prompt('Qty Update:', '0')) || 0;
-            
-            const selisih = qtyBaru - qtyUpdate;
-            let status = 'SESUAI';
-            let statusClass = 'status-match';
-            
-            if (selisih > 0) {
-                status = `LEBIH +${selisih}`;
-                statusClass = 'status-plus';
-            } else if (selisih < 0) {
-                status = `KURANG ${selisih}`;
-                statusClass = 'status-minus';
-            }
-            
-            comparisonResults.push({
-                id: comparisonResults.length + 1,
-                barcode: barcode,
-                nama_barang: namaBarang,
-                gudang: gudang,
-                qty_sales: qtySales,
-                qty_opname: qtyBaru,
-                qty_update: qtyUpdate,
-                qty_baru: qtyBaru,
-                selisih: selisih,
-                status: status,
-                status_class: statusClass,
-                reason: 'Manual entry',
-                created_by: currentUser.email,
-                updated_at: new Date().toISOString()
-            });
-            
-            updateComparisonTable();
-            updateReportSummary();
-            updateSaveLocalButton();
         }
 
         // Handle file uploads
