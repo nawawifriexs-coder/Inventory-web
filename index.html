@@ -405,77 +405,9 @@
             font-family: monospace;
             white-space: pre-wrap;
         }
-
-        /* Progress Indicator */
-        .progress-container {
-            margin: 10px 0;
-            background: #f0f0f0;
-            border-radius: 10px;
-            height: 20px;
-            overflow: hidden;
-        }
-
-        .progress-bar {
-            background: linear-gradient(90deg, #3498db, #2ecc71);
-            height: 100%;
-            border-radius: 10px;
-            transition: width 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 12px;
-            font-weight: bold;
-        }
-
-        .progress-info {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 5px;
-            font-size: 12px;
-            color: #666;
-        }
-
-        /* Loading overlay */
-        .loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.7);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            color: white;
-        }
-
-        .loading-spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 2s linear infinite;
-            margin-bottom: 15px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
     </style>
 </head>
 <body>
-    <!-- Loading Overlay -->
-    <div id="loadingOverlay" class="loading-overlay hidden">
-        <div class="loading-spinner"></div>
-        <div id="loadingText">Memuat data...</div>
-        <div id="loadingProgress" class="progress-info"></div>
-    </div>
-
     <!-- Login Section -->
     <div id="loginSection" class="login-section">
         <h2 style="text-align: center; margin-bottom: 20px;">🔐 Login Sistem Stok Opname</h2>
@@ -592,17 +524,6 @@
                 <div class="section">
                     <h2>📋 Hasil Perbandingan & Edit Qty</h2>
                     
-                    <!-- Progress Indicator -->
-                    <div id="loadProgress" class="hidden">
-                        <div class="progress-container">
-                            <div id="progressBar" class="progress-bar" style="width: 0%">0%</div>
-                        </div>
-                        <div class="progress-info">
-                            <span id="progressText">Memuat data...</span>
-                            <span id="progressCount">0 records</span>
-                        </div>
-                    </div>
-                    
                     <!-- Filter Section -->
                     <div class="filter-section">
                         <div class="filter-title">🔍 Filter Tampilan Data</div>
@@ -645,9 +566,6 @@
                         </button>
                         <button onclick="loadFromSupabase()" class="btn-secondary" id="loadBtn">
                             📥 Load dari Database
-                        </button>
-                        <button onclick="loadFromSupabaseWithPagination()" class="btn-info" id="loadPaginationBtn">
-                            📚 Load Semua Data (Pagination)
                         </button>
                         <button onclick="addManualItem()" class="btn-warning">
                             ➕ Tambah Barang Manual
@@ -983,198 +901,8 @@ CREATE INDEX IF NOT EXISTS idx_stok_opname_updated ON stok_opname(updated_at);
         }
 
         // ============================================
-        // FUNGSI UTAMA YANG DIPERBAIKI - LOAD SEMUA DATA
+        // FUNGSI UTAMA YANG DIPERBAIKI
         // ============================================
-
-        // Show loading overlay
-        function showLoading(message = 'Memuat data...') {
-            document.getElementById('loadingOverlay').classList.remove('hidden');
-            document.getElementById('loadingText').textContent = message;
-        }
-
-        // Hide loading overlay
-        function hideLoading() {
-            document.getElementById('loadingOverlay').classList.add('hidden');
-        }
-
-        // Update progress bar
-        function updateProgress(percentage, current, total, message = 'Memuat data...') {
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            const progressCount = document.getElementById('progressCount');
-            
-            progressBar.style.width = percentage + '%';
-            progressBar.textContent = Math.round(percentage) + '%';
-            progressText.textContent = message;
-            progressCount.textContent = `${current} dari ${total} records`;
-        }
-
-        // Load from Supabase - VERSI PAGINATION UNTUK DATA BESAR
-        async function loadFromSupabaseWithPagination() {
-            try {
-                showLoading('Memulai load data dengan pagination...');
-                document.getElementById('loadProgress').classList.remove('hidden');
-                
-                const loadBtn = document.getElementById('loadPaginationBtn');
-                const originalText = loadBtn.innerHTML;
-                loadBtn.innerHTML = '⏳ Memuat...';
-                loadBtn.disabled = true;
-
-                let allData = [];
-                let from = 0;
-                const batchSize = 1000; // Supabase max per request
-                let totalRecords = 0;
-                let currentBatch = 0;
-
-                // First, get total count
-                const { count, error: countError } = await supabase
-                    .from('stok_opname')
-                    .select('*', { count: 'exact', head: true });
-
-                if (countError) throw countError;
-
-                totalRecords = count || 0;
-                
-                if (totalRecords === 0) {
-                    hideLoading();
-                    document.getElementById('loadProgress').classList.add('hidden');
-                    alert('Tidak ada data di database.');
-                    return;
-                }
-
-                updateProgress(0, 0, totalRecords, 'Memulai load data...');
-
-                // Load data in batches
-                while (from < totalRecords) {
-                    currentBatch++;
-                    const to = Math.min(from + batchSize - 1, totalRecords - 1);
-                    
-                    const { data, error } = await supabase
-                        .from('stok_opname')
-                        .select('*')
-                        .order('updated_at', { ascending: false })
-                        .range(from, to);
-
-                    if (error) throw error;
-
-                    if (data && data.length > 0) {
-                        allData = allData.concat(data);
-                        
-                        // Update progress
-                        const percentage = (allData.length / totalRecords) * 100;
-                        updateProgress(
-                            percentage, 
-                            allData.length, 
-                            totalRecords, 
-                            `Memuat batch ${currentBatch}...`
-                        );
-                        
-                        from += batchSize;
-                    } else {
-                        break;
-                    }
-                }
-
-                comparisonResults = allData;
-                updateComparisonTable();
-                updateReportSummary();
-                document.getElementById('saveBtn').disabled = false;
-                updateSaveLocalButton();
-                
-                // Reset UI
-                hideLoading();
-                document.getElementById('loadProgress').classList.add('hidden');
-                loadBtn.innerHTML = originalText;
-                loadBtn.disabled = false;
-                
-                alert(`✅ Data berhasil dimuat: ${comparisonResults.length} records (menggunakan pagination)`);
-                
-            } catch (error) {
-                console.error('Error loading data with pagination:', error);
-                
-                // Reset UI
-                hideLoading();
-                document.getElementById('loadProgress').classList.add('hidden');
-                const loadBtn = document.getElementById('loadPaginationBtn');
-                loadBtn.innerHTML = '📚 Load Semua Data (Pagination)';
-                loadBtn.disabled = false;
-                
-                let errorMessage = `❌ Error memuat data: ${error.message}`;
-                
-                if (error.message.includes('does not exist')) {
-                    errorMessage += '\n\n📋 Tabel "stok_opname" belum dibuat. Silakan buat tabel terlebih dahulu di Supabase.';
-                    errorMessage += '\nGunakan tombol "Buat Tabel" di panel Debug.';
-                }
-                
-                alert(errorMessage);
-            }
-        }
-
-        // Load from Supabase - VERSI LIMIT TINGGI (untuk data hingga 10,000 records)
-        async function loadFromSupabase() {
-            try {
-                showLoading('Memuat data dari database...');
-                
-                const loadBtn = document.getElementById('loadBtn');
-                const originalText = loadBtn.innerHTML;
-                loadBtn.innerHTML = '⏳ Memuat...';
-                loadBtn.disabled = true;
-
-                // Load semua data sekaligus dengan limit tinggi
-                const { data, error } = await supabase
-                    .from('stok_opname')
-                    .select('*')
-                    .order('updated_at', { ascending: false })
-                    .limit(10000); // Increase limit to 10,000
-
-                if (error) {
-                    // Jika error karena limit, fallback ke pagination
-                    if (error.message.includes('limit') || error.message.includes('range')) {
-                        hideLoading();
-                        await loadFromSupabaseWithPagination();
-                        return;
-                    }
-                    throw error;
-                }
-
-                comparisonResults = data || [];
-                updateComparisonTable();
-                updateReportSummary();
-                document.getElementById('saveBtn').disabled = false;
-                updateSaveLocalButton();
-                
-                // Reset UI
-                hideLoading();
-                loadBtn.innerHTML = originalText;
-                loadBtn.disabled = false;
-                
-                alert(`✅ Data berhasil dimuat: ${comparisonResults.length} records`);
-                
-            } catch (error) {
-                console.error('Error loading data:', error);
-                
-                // Reset UI
-                hideLoading();
-                const loadBtn = document.getElementById('loadBtn');
-                loadBtn.innerHTML = '📥 Load dari Database';
-                loadBtn.disabled = false;
-                
-                let errorMessage = `❌ Error memuat data: ${error.message}`;
-                
-                if (error.message.includes('does not exist')) {
-                    errorMessage += '\n\n📋 Tabel "stok_opname" belum dibuat. Silakan buat tabel terlebih dahulu di Supabase.';
-                    errorMessage += '\nGunakan tombol "Buat Tabel" di panel Debug.';
-                } else if (error.message.includes('limit') || error.message.includes('range')) {
-                    // Fallback ke pagination
-                    errorMessage += '\n\n🔄 Mencoba metode pagination...';
-                    alert(errorMessage);
-                    await loadFromSupabaseWithPagination();
-                    return;
-                }
-                
-                alert(errorMessage);
-            }
-        }
 
         // Save to Supabase - VERSI DIPERBAIKI
         async function saveToSupabase() {
@@ -1185,7 +913,6 @@ CREATE INDEX IF NOT EXISTS idx_stok_opname_updated ON stok_opname(updated_at);
 
             try {
                 // Tampilkan loading state
-                showLoading('Menyimpan data ke database...');
                 const saveBtn = document.getElementById('saveBtn');
                 const originalText = saveBtn.innerHTML;
                 saveBtn.innerHTML = '⏳ Menyimpan...';
@@ -1266,7 +993,6 @@ CREATE INDEX IF NOT EXISTS idx_stok_opname_updated ON stok_opname(updated_at);
                 updateSaveLocalButton();
 
                 // Update tombol
-                hideLoading();
                 saveBtn.innerHTML = originalText;
                 saveBtn.disabled = false;
 
@@ -1274,7 +1000,6 @@ CREATE INDEX IF NOT EXISTS idx_stok_opname_updated ON stok_opname(updated_at);
                 
             } catch (error) {
                 // Reset tombol
-                hideLoading();
                 const saveBtn = document.getElementById('saveBtn');
                 saveBtn.innerHTML = '💾 Simpan ke Database';
                 saveBtn.disabled = false;
@@ -1300,46 +1025,51 @@ CREATE INDEX IF NOT EXISTS idx_stok_opname_updated ON stok_opname(updated_at);
             }
         }
 
-        // Load master data - VERSI DIPERBAIKI
-        async function loadMasterData() {
+        // Load from Supabase - VERSI DIPERBAIKI
+        async function loadFromSupabase() {
             try {
-                showLoading('Memuat data master...');
+                // Tampilkan loading
+                const loadBtn = document.getElementById('loadBtn');
+                const originalText = loadBtn.innerHTML;
+                loadBtn.innerHTML = '⏳ Memuat...';
+                loadBtn.disabled = true;
                 
                 const { data, error } = await supabase
-                    .from('master_barang')
+                    .from('stok_opname')
                     .select('*')
-                    .order('nama_barang')
-                    .limit(10000); // Increase limit
+                    .order('updated_at', { ascending: false })
+                    .limit(1000); // Batasi hasil
 
                 if (error) throw error;
 
-                const tbody = document.getElementById('masterBody');
-                tbody.innerHTML = '';
+                comparisonResults = data || [];
+                updateComparisonTable();
+                updateReportSummary();
+                document.getElementById('saveBtn').disabled = false;
+                updateSaveLocalButton();
                 
-                if (data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Tidak ada data master</td></tr>';
-                    hideLoading();
-                    return;
-                }
+                // Reset tombol
+                loadBtn.innerHTML = originalText;
+                loadBtn.disabled = false;
                 
-                data.forEach(item => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${item.barcode}</td>
-                        <td>${item.nama_barang}</td>
-                        <td>${item.gudang}</td>
-                        <td>${item.stok_terakhir || 0}</td>
-                        <td>${new Date(item.updated_at).toLocaleDateString('id-ID')}</td>
-                    `;
-                    tbody.appendChild(row);
-                });
-                
-                hideLoading();
-                alert(`✅ Data master berhasil dimuat: ${data.length} records`);
+                alert(`✅ Data berhasil dimuat: ${comparisonResults.length} records`);
                 
             } catch (error) {
-                hideLoading();
-                alert(`❌ Error memuat data master: ${error.message}`);
+                console.error('Error loading data:', error);
+                
+                // Reset tombol
+                const loadBtn = document.getElementById('loadBtn');
+                loadBtn.innerHTML = '📥 Load dari Database';
+                loadBtn.disabled = false;
+                
+                let errorMessage = `❌ Error memuat data: ${error.message}`;
+                
+                if (error.message.includes('does not exist')) {
+                    errorMessage += '\n\n📋 Tabel "stok_opname" belum dibuat. Silakan buat tabel terlebih dahulu di Supabase.';
+                    errorMessage += '\nGunakan tombol "Buat Tabel" di panel Debug.';
+                }
+                
+                alert(errorMessage);
             }
         }
 
@@ -1360,7 +1090,7 @@ CREATE INDEX IF NOT EXISTS idx_stok_opname_updated ON stok_opname(updated_at);
             localStorage.setItem('stokOpnameData', JSON.stringify(dataToSave));
             
             // Tampilkan notifikasi
-            alert('✅ Data berhasil disimpan sementara di browser! Data tidak akan hilamg saat refresh halaman.');
+            alert('✅ Data berhasil disimpan sementara di browser! Data tidak akan hilang saat refresh halaman.');
             
             // Update status tombol
             updateSaveLocalButton();
@@ -1904,6 +1634,41 @@ CREATE INDEX IF NOT EXISTS idx_stok_opname_updated ON stok_opname(updated_at);
             updateSaveLocalButton();
         }
 
+        // Load master data
+        async function loadMasterData() {
+            try {
+                const { data, error } = await supabase
+                    .from('master_barang')
+                    .select('*')
+                    .order('nama_barang');
+
+                if (error) throw error;
+
+                const tbody = document.getElementById('masterBody');
+                tbody.innerHTML = '';
+                
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Tidak ada data master</td></tr>';
+                    return;
+                }
+                
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${item.barcode}</td>
+                        <td>${item.nama_barang}</td>
+                        <td>${item.gudang}</td>
+                        <td>${item.stok_terakhir || 0}</td>
+                        <td>${new Date(item.updated_at).toLocaleDateString('id-ID')}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                
+            } catch (error) {
+                alert(`❌ Error memuat data master: ${error.message}`);
+            }
+        }
+
         // Sync to master data
         async function syncToMaster() {
             if (comparisonResults.length === 0) {
@@ -1912,8 +1677,6 @@ CREATE INDEX IF NOT EXISTS idx_stok_opname_updated ON stok_opname(updated_at);
             }
 
             try {
-                showLoading('Menyinkronisasi data master...');
-                
                 const masterData = comparisonResults.map(item => ({
                     barcode: item.barcode,
                     nama_barang: item.nama_barang,
@@ -1928,11 +1691,9 @@ CREATE INDEX IF NOT EXISTS idx_stok_opname_updated ON stok_opname(updated_at);
 
                 if (error) throw error;
 
-                hideLoading();
                 alert('✅ Data master berhasil diupdate!');
                 
             } catch (error) {
-                hideLoading();
                 alert(`❌ Error sync data: ${error.message}`);
             }
         }
